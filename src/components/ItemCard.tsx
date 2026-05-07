@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CulinaryItem } from '../data/mockData';
-import { MapPin, Clock, ChefHat, Wrench, Bookmark, Star, ChevronDown } from 'lucide-react';
+import { MapPin, Clock, ChefHat, Wrench, Bookmark, Star, ChevronDown, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Props {
@@ -14,6 +14,30 @@ interface Props {
 export default function ItemCard({ item, className = '', featured = false, onToggleStatus }: Props) {
   const isExperienced = item.status === 'EXPERIENCED';
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const shareData = {
+      title: item.title,
+      text: item.personal_review || `Check out ${item.title}`,
+      url: item.original_url || window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
+        alert('Link copied to clipboard!');
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Error sharing:', err);
+      }
+    }
+  };
 
   const getTypeIcon = () => {
     switch (item.type) {
@@ -48,19 +72,28 @@ export default function ItemCard({ item, className = '', featured = false, onTog
               {item.type}
             </span>
           </div>
-          <button 
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onToggleStatus?.(item.id);
-            }}
-            className={`p-2 rounded-xl backdrop-blur-sm transition-colors ${
-            isExperienced 
-              ? 'bg-[var(--color-accent)] text-white' 
-              : 'bg-white/20 text-white hover:bg-white hover:text-[var(--color-accent)]'
-          }`}>
-            <Bookmark className="w-4 h-4" fill={isExperienced ? 'currentColor' : 'none'} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleShare}
+              title="Share"
+              className="p-2 rounded-xl backdrop-blur-sm transition-colors bg-white/20 text-white hover:bg-white hover:text-[var(--color-accent)]"
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleStatus?.(item.id);
+              }}
+              className={`p-2 rounded-xl backdrop-blur-sm transition-colors ${
+              isExperienced 
+                ? 'bg-[var(--color-accent)] text-white' 
+                : 'bg-white/20 text-white hover:bg-white hover:text-[var(--color-accent)]'
+            }`}>
+              <Bookmark className="w-4 h-4" fill={isExperienced ? 'currentColor' : 'none'} />
+            </button>
+          </div>
         </div>
 
         {/* Featured inner text */}

@@ -13,11 +13,22 @@ export default function App() {
   const [activeType, setActiveType] = useState<CulinaryItem['type'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const relevantItems = useMemo(() => {
+    let result = items;
+    if (viewMode === 'ARCHIVE') {
+       result = result.filter(item => item.status === 'EXPERIENCED');
+    }
+    if (activeType) {
+      result = result.filter(item => item.type === activeType);
+    }
+    return result;
+  }, [items, viewMode, activeType]);
+
   const recommendedTags = useMemo(() => {
     if (!searchQuery.trim()) {
       // Top 4 most frequent tags
       const frequencies: Record<string, number> = {};
-      items.forEach(item => {
+      relevantItems.forEach(item => {
         item.context_tags.forEach(tag => {
           frequencies[tag] = (frequencies[tag] || 0) + 1;
         });
@@ -31,7 +42,7 @@ export default function App() {
     const q = searchQuery.toLowerCase();
     const matchingTags = new Set<string>();
     
-    items.forEach(item => {
+    relevantItems.forEach(item => {
       const titleMatch = item.title.toLowerCase().includes(q);
       const tagMatch = item.context_tags.some(t => t.toLowerCase().includes(q));
       
@@ -45,7 +56,7 @@ export default function App() {
     });
 
     return Array.from(matchingTags).slice(0, 6);
-  }, [items, searchQuery]);
+  }, [relevantItems, searchQuery]);
 
   const displayTags = useMemo(() => {
     const tags = new Set(recommendedTags);
@@ -56,16 +67,7 @@ export default function App() {
   }, [recommendedTags, activeFilter]);
 
   const filteredItems = useMemo(() => {
-    let result = items;
-    // If Archive mode, only show EXPERIENCED. If gallery, show all or maybe just SAVED? 
-    // The design didn't specify, let's say Gallery shows all and Archive is just a placeholder.
-    if (viewMode === 'ARCHIVE') {
-       result = result.filter(item => item.status === 'EXPERIENCED');
-    }
-    
-    if (activeType) {
-      result = result.filter(item => item.type === activeType);
-    }
+    let result = relevantItems;
     
     if (activeFilter) {
       result = result.filter(item => item.context_tags.includes(activeFilter));
@@ -80,7 +82,7 @@ export default function App() {
     }
 
     return result;
-  }, [activeFilter, items, viewMode, searchQuery]);
+  }, [activeFilter, relevantItems, searchQuery]);
 
   const handleToggleStatus = (id: string) => {
     setItems(prev => prev.map(item => 
@@ -216,18 +218,15 @@ export default function App() {
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 lg:pb-0">
             <button
               onClick={() => {
-                setViewMode('GALLERY');
                 setActiveFilter(null);
-                setActiveType(null);
-                setSearchQuery('');
               }}
               className={`whitespace-nowrap px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter transition-colors ${
-                activeFilter === null && viewMode !== 'ARCHIVE' && activeType === null
+                activeFilter === null
                   ? 'bg-stone-800 text-white'
                   : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
               }`}
             >
-              All
+              All Tags
             </button>
             {displayTags.map(tag => (
               <button
