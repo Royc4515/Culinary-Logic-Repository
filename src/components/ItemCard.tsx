@@ -159,20 +159,41 @@ export default function ItemCard({ item, className = '', featured = false, onTog
                   className="overflow-hidden"
                 >
                   <div className="mt-4 pt-4 border-t border-stone-100 mb-4 text-sm text-stone-500">
-                    {item.type === 'RECIPE' && item.specific_data.ingredients && (
+                    {item.type === 'RECIPE' && (
                       <div className="mb-2">
-                        <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-2">Ingredients</h4>
-                        <ul className="space-y-1">
-                          {item.specific_data.ingredients.map((ing: string, i: number) => (
-                            <li key={i} className="flex gap-2"><span className="text-stone-300">•</span> {ing}</li>
-                          ))}
-                        </ul>
+                        <div className="flex flex-wrap gap-4 mb-3 text-xs text-stone-600">
+                          {!!item.specific_data.prep_time_minutes && <div><span className="font-bold">Prep:</span> {item.specific_data.prep_time_minutes}m</div>}
+                          {!!item.specific_data.cook_time_minutes && <div><span className="font-bold">Cook:</span> {item.specific_data.cook_time_minutes}m</div>}
+                          {item.specific_data.serving_size && <div><span className="font-bold">Servings:</span> {item.specific_data.serving_size}</div>}
+                          {item.specific_data.difficulty && <div><span className="font-bold">Difficulty:</span> {item.specific_data.difficulty}</div>}
+                        </div>
+                        {item.specific_data.ingredients?.length > 0 && (
+                          <>
+                            <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-2">Ingredients</h4>
+                            <ul className="space-y-1">
+                              {item.specific_data.ingredients.map((ing: string, i: number) => (
+                                <li key={i} className="flex gap-2"><span className="text-stone-300">•</span> {ing}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </div>
                     )}
                     {item.type === 'PLACE' && item.specific_data.location && (
                       <div className="mb-2">
                         <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Full Address</h4>
                         <p>{item.specific_data.location.address}</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {item.specific_data.website && (
+                            <a href={item.specific_data.website} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Website</a>
+                          )}
+                          {item.specific_data.wolt_url && (
+                            <a href={item.specific_data.wolt_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Wolt</a>
+                          )}
+                          {item.specific_data.instagram_url && (
+                            <a href={item.specific_data.instagram_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Instagram</a>
+                          )}
+                        </div>
                       </div>
                     )}
                     {item.type === 'GEAR' && (
@@ -180,6 +201,34 @@ export default function ItemCard({ item, className = '', featured = false, onTog
                         <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Details</h4>
                         <p>Brand: {item.specific_data.brand}</p>
                         <p>Price: {item.specific_data.price}</p>
+                        {item.specific_data.purchase_link && (
+                          <p className="mt-1 mb-2">
+                            Link:{' '}
+                            <a
+                              href={item.specific_data.purchase_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--color-accent)] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              View Store
+                            </a>
+                          </p>
+                        )}
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if(item.specific_data.purchase_link) {
+                              window.open(item.specific_data.purchase_link, '_blank');
+                            } else if (item.original_url) {
+                              window.open(item.original_url, '_blank');
+                            }
+                          }}
+                          className="mt-2 py-1.5 px-3 bg-stone-800 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-stone-700 transition-colors"
+                        >
+                          View Specs
+                        </button>
                       </div>
                     )}
                   </div>
@@ -227,20 +276,41 @@ export default function ItemCard({ item, className = '', featured = false, onTog
                   className="overflow-hidden"
                 >
                   <div className="mt-4 pt-4 border-t border-stone-100 mb-2 text-sm text-stone-500">
-                    {item.type === 'RECIPE' && item.specific_data.ingredients && (
+                    {item.type === 'RECIPE' && (
                       <div className="mb-2">
-                        <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-2">Ingredients</h4>
-                        <ul className="space-y-1">
-                          {item.specific_data.ingredients.map((ing: string, i: number) => (
-                            <li key={i} className="flex gap-2"><span className="text-stone-300">•</span> {ing}</li>
-                          ))}
-                        </ul>
+                        <div className="flex flex-wrap gap-4 mb-3 text-xs text-stone-600">
+                          {!!item.specific_data.prep_time_minutes && <div><span className="font-bold">Prep:</span> {item.specific_data.prep_time_minutes}m</div>}
+                          {!!item.specific_data.cook_time_minutes && <div><span className="font-bold">Cook:</span> {item.specific_data.cook_time_minutes}m</div>}
+                          {item.specific_data.serving_size && <div><span className="font-bold">Servings:</span> {item.specific_data.serving_size}</div>}
+                          {item.specific_data.difficulty && <div><span className="font-bold">Difficulty:</span> {item.specific_data.difficulty}</div>}
+                        </div>
+                        {item.specific_data.ingredients?.length > 0 && (
+                          <>
+                            <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-2">Ingredients</h4>
+                            <ul className="space-y-1">
+                              {item.specific_data.ingredients.map((ing: string, i: number) => (
+                                <li key={i} className="flex gap-2"><span className="text-stone-300">•</span> {ing}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </div>
                     )}
                     {item.type === 'PLACE' && item.specific_data.location && (
                       <div className="mb-2">
                         <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Full Address</h4>
                         <p>{item.specific_data.location.address}</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {item.specific_data.website && (
+                            <a href={item.specific_data.website} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Website</a>
+                          )}
+                          {item.specific_data.wolt_url && (
+                            <a href={item.specific_data.wolt_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Wolt</a>
+                          )}
+                          {item.specific_data.instagram_url && (
+                            <a href={item.specific_data.instagram_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Instagram</a>
+                          )}
+                        </div>
                       </div>
                     )}
                     {item.type === 'GEAR' && (
@@ -248,6 +318,20 @@ export default function ItemCard({ item, className = '', featured = false, onTog
                         <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Details</h4>
                         <p>Brand: {item.specific_data.brand}</p>
                         <p>Price: {item.specific_data.price}</p>
+                        {item.specific_data.purchase_link && (
+                          <p className="mt-1">
+                            Link:{' '}
+                            <a
+                              href={item.specific_data.purchase_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--color-accent)] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              View Store
+                            </a>
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
