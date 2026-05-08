@@ -1,17 +1,38 @@
-import React, { useState, useMemo } from 'react';
-import { Map, Grid, Search, Filter } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Map, Grid, Search, Filter, Plus } from 'lucide-react';
 import { mockItems, CulinaryItem } from './data/mockData';
 import ItemCard from './components/ItemCard';
 import EmptyState from './components/EmptyState';
+import AddManualItemModal from './components/AddManualItemModal';
+import MapView from './components/MapView';
+import { supabase } from './lib/supabase';
 
 type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
 
 export default function App() {
-  const [items, setItems] = useState<CulinaryItem[]>(mockItems);
+  const [items, setItems] = useState<CulinaryItem[]>(supabase ? [] : mockItems);
   const [viewMode, setViewMode] = useState<ViewMode>('GALLERY');
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<CulinaryItem['type'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  useEffect(() => {
+    async function fetchItems() {
+      if (!supabase) return;
+      const { data, error } = await supabase
+        .from('culinary_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching items:', error);
+      } else if (data) {
+        setItems(data as CulinaryItem[]);
+      }
+    }
+    fetchItems();
+  }, []);
 
   const relevantItems = useMemo(() => {
     let result = items;
@@ -84,12 +105,36 @@ export default function App() {
     return result;
   }, [activeFilter, relevantItems, searchQuery]);
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = async (id: string) => {
+    const itemToUpdate = items.find(item => item.id === id);
+    if (!itemToUpdate) return;
+    
+    const newStatus = itemToUpdate.status === 'SAVED' ? 'EXPERIENCED' : 'SAVED';
+
+    // Optimistic UI update
     setItems(prev => prev.map(item => 
       item.id === id 
-        ? { ...item, status: item.status === 'SAVED' ? 'EXPERIENCED' : 'SAVED' }
+        ? { ...item, status: newStatus }
         : item
     ));
+
+    if (supabase) {
+      // Database update
+      const { error } = await supabase
+        .from('culinary_items')
+        .update({ status: newStatus })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating status:', error);
+        // Revert on error
+        setItems(prev => prev.map(item => 
+          item.id === id 
+            ? { ...item, status: itemToUpdate.status }
+            : item
+        ));
+      }
+    }
   };
 
   return (
@@ -147,9 +192,18 @@ export default function App() {
               </div>
             </div>
 
-            {/* Mobile Avatar */}
-            <div className="lg:hidden h-8 w-8 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
-              RC
+            {/* Mobile Actions */}
+            <div className="lg:hidden flex items-center gap-3 shrink-0">
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
+                aria-label="Add Item"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <div className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
+                RC
+              </div>
             </div>
         </div>
 
@@ -243,8 +297,17 @@ export default function App() {
             ))}
           </div>
           
-          <div className="hidden lg:flex h-10 w-10 shrink-0 bg-stone-800 rounded-full items-center justify-center text-white font-bold text-xs shadow-lg">
-            RC
+          <div className="hidden lg:flex items-center gap-4">
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 px-4 h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Add Item
+            </button>
+            <div className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
+              RC
+            </div>
           </div>
         </div>
       </header>
@@ -279,13 +342,7 @@ export default function App() {
              )}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl h-[600px] flex items-center justify-center border border-stone-100 shadow-[var(--shadow-card)]">
-             <div className="text-center">
-                <Map className="w-12 h-12 mx-auto text-stone-300 mb-4" />
-                <h3 className="text-lg font-serif">Geographic View</h3>
-                <p className="text-stone-400 text-sm mt-2">Map integration placeholder. In a full implementation,<br/>this would display Server-Side geocoded locations.</p>
-             </div>
-          </div>
+          <MapView items={filteredItems} onToggleStatus={handleToggleStatus} />
         )}
       </main>
 
@@ -295,6 +352,12 @@ export default function App() {
           <span>Status: Synced with Bot</span>
         </div>
       </footer>
+
+      <AddManualItemModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
+      />
     </div>
   );
 }

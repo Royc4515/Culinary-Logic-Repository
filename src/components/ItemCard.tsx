@@ -9,9 +9,10 @@ interface Props {
   key?: string;
   featured?: boolean;
   onToggleStatus?: (id: string) => void;
+  isMinimal?: boolean;
 }
 
-export default function ItemCard({ item, className = '', featured = false, onToggleStatus }: Props) {
+export default function ItemCard({ item, className = '', featured = false, onToggleStatus, isMinimal = false }: Props) {
   const isExperienced = item.status === 'EXPERIENCED';
   const [isExpanded, setIsExpanded] = useState(false);
 
