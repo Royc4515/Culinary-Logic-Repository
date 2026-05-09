@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import urllib.parse
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
@@ -44,7 +45,7 @@ def scrape_metadata(url):
     """Scrapes OpenGraph metadata from a URL using Microlink as a robust extraction API, with a fallback to basic requests."""
     try:
         # Use Microlink API to handle JS-rendered and anti-bot protected sites like Instagram/TikTok
-        microlink_url = f"https://api.microlink.io?url={url}"
+        microlink_url = f"https://api.microlink.io?url={urllib.parse.quote(url, safe='')}"
         
         # Optional: Un-comment and use if you have a Microlink Pro plan
         # headers = {'x-api-key': os.getenv('MICROLINK_API_KEY')}
@@ -86,9 +87,9 @@ def scrape_metadata(url):
         og_desc = soup.find('meta', property='og:description')
         
         # Fallbacks
-        title = og_title['content'] if og_title else soup.title.string if soup.title else "Unknown Title"
-        description = og_desc['content'] if og_desc else ""
-        thumbnail_url = og_image['content'] if og_image else "https://via.placeholder.com/400?text=No+Thumbnail"
+        title = og_title.get('content') if og_title else soup.title.string if soup.title else "Unknown Title"
+        description = og_desc.get('content') if og_desc else ""
+        thumbnail_url = og_image.get('content') if og_image else "https://via.placeholder.com/400?text=No+Thumbnail"
         
         return thumbnail_url, title, description
     except Exception as e:
