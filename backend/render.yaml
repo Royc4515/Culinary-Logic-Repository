@@ -1,6 +1,7 @@
 services:
   - type: web
     name: clr-backend
+    plan: free
     runtime: python
     # Render runs these commands from the repo root by default.
     # In the Render dashboard, set "Root Directory" to "backend" so that
