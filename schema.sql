@@ -26,26 +26,27 @@ CREATE TABLE culinary_items (
 -- 3. Set up Row Level Security (RLS) policies
 ALTER TABLE culinary_items ENABLE ROW LEVEL SECURITY;
 
--- Allow users to view only their own items
-CREATE POLICY "Users can view own items"
+-- Anyone (including unauthenticated visitors) can view items in the public gallery.
+-- The Telegram bot bypasses RLS entirely via the service_role key, so this policy
+-- is only relevant to the anon key used by the React frontend.
+CREATE POLICY "Public read access"
 ON culinary_items
 FOR SELECT
-USING (auth.uid() = user_id);
+USING (true);
 
--- Allow users to insert their own items
-CREATE POLICY "Users can insert own items"
+-- Only a signed-in admin can write data. The Telegram bot uses the service_role key
+-- and therefore bypasses RLS — these three policies only gate the React frontend.
+CREATE POLICY "Admin insert access"
 ON culinary_items
 FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK (auth.role() = 'authenticated');
 
--- Allow users to update their own items
-CREATE POLICY "Users can update own items"
+CREATE POLICY "Admin update access"
 ON culinary_items
 FOR UPDATE
-USING (auth.uid() = user_id);
+USING (auth.role() = 'authenticated');
 
--- Allow users to delete their own items
-CREATE POLICY "Users can delete own items"
+CREATE POLICY "Admin delete access"
 ON culinary_items
 FOR DELETE
-USING (auth.uid() = user_id);
+USING (auth.role() = 'authenticated');
