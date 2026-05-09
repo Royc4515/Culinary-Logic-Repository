@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles, Lock } from 'lucide-react';
+import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles } from 'lucide-react';
 import { mockItems, CulinaryItem } from './data/mockData';
 import ItemCard from './components/ItemCard';
 import EmptyState from './components/EmptyState';
@@ -87,17 +87,17 @@ export default function App() {
         .from('culinary_items')
         .select('*')
         .order('created_at', { ascending: false });
-
+      
       if (error) {
         console.error('Error fetching items:', error);
       } else if (data) {
         setItems(data as CulinaryItem[]);
       }
     }
-
-    // Fetch items for everyone — public SELECT policy allows unauthenticated reads.
-    // Re-fetch when session changes so the admin sees fresh data after login.
-    fetchItems();
+    
+    if (!supabase || session) {
+      fetchItems();
+    }
   }, [session]);
 
   const handleLogout = async () => {
@@ -235,25 +235,12 @@ export default function App() {
     }
   };
 
-  const handleAdminLogin = async () => {
-    if (!supabase) return;
-    let redirectUrl = window.location.origin + '/';
-    if (window.location.origin.includes('localhost')) {
-      redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
-    }
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
-    });
-    if (error) { console.error(error); return; }
-    if (data?.url) {
-      const popup = window.open(data.url, 'oauth_popup', 'width=600,height=700');
-      if (!popup) alert('Please allow popups to sign in.');
-    }
-  };
-
   if (isInitializingAuth) {
     return <div className="min-h-screen flex items-center justify-center bg-stone-50"><p className="text-stone-500 font-bold uppercase tracking-widest text-xs">Loading...</p></div>;
+  }
+
+  if (supabase && !session) {
+    return <AuthScreen />;
   }
 
   return (
@@ -313,32 +300,24 @@ export default function App() {
 
             {/* Mobile Actions */}
             <div className="lg:hidden flex items-center gap-2 shrink-0">
-              {session ? (
-                <>
-                  <button
-                    onClick={() => setIsSmartModalOpen(true)}
-                    className="h-8 px-3 bg-stone-800 rounded-full flex items-center gap-1.5 justify-center text-white shadow-lg hover:bg-stone-700 transition-colors text-[10px] font-bold uppercase"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-blue-300" />
-                    <span className="hidden sm:inline">Smart Add</span>
-                  </button>
-                  <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
-                    aria-label="Add Item"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button onClick={handleLogout} className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
-                    <LogOut className="w-3 h-3" />
-                  </button>
-                </>
-              ) : (
-                supabase && (
-                  <button onClick={handleAdminLogin} title="Admin Login" className="h-8 w-8 bg-stone-200 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-300 transition-colors">
-                    <Lock className="w-3.5 h-3.5" />
-                  </button>
-                )
+              <button 
+                onClick={() => setIsSmartModalOpen(true)}
+                className="h-8 px-3 bg-stone-800 rounded-full flex items-center gap-1.5 justify-center text-white shadow-lg hover:bg-stone-700 transition-colors text-[10px] font-bold uppercase"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+                <span className="hidden sm:inline">Smart Add</span>
+              </button>
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
+                aria-label="Add Item"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              {supabase && (
+                <button onClick={handleLogout} className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
+                  <LogOut className="w-3 h-3" />
+                </button>
               )}
             </div>
         </div>
@@ -434,37 +413,24 @@ export default function App() {
           </div>
           
           <div className="hidden lg:flex items-center gap-3">
-            {session ? (
-              <>
-                <button
-                  onClick={() => setIsSmartModalOpen(true)}
-                  className="flex items-center gap-2 px-4 h-10 bg-stone-800 text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-stone-700 hover:opacity-90 transition-all shrink-0"
-                >
-                  <Sparkles className="w-4 h-4 text-blue-300" />
-                  Smart Add
-                </button>
-                <button
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="flex items-center gap-2 w-10 justify-center h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
-                  title="Add Manual"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button onClick={handleLogout} className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-stone-700 transition">
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
-              supabase && (
-                <button
-                  onClick={handleAdminLogin}
-                  title="Admin Login"
-                  className="h-10 px-4 shrink-0 bg-stone-100 border border-stone-200 rounded-full flex items-center gap-2 text-stone-500 text-xs font-bold uppercase tracking-widest hover:bg-stone-200 transition"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  Admin
-                </button>
-              )
+            <button
+              onClick={() => setIsSmartModalOpen(true)}
+              className="flex items-center gap-2 px-4 h-10 bg-stone-800 text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-stone-700 hover:opacity-90 transition-all shrink-0"
+            >
+              <Sparkles className="w-4 h-4 text-blue-300" />
+              Smart Add
+            </button>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 w-10 justify-center h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
+              title="Add Manual"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {supabase && (
+              <button onClick={handleLogout} className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-stone-700 transition">
+                <LogOut className="w-4 h-4" />
+              </button>
             )}
           </div>
         </div>
@@ -488,20 +454,20 @@ export default function App() {
                  // Make the first item large, then every 6th item large
                  const isFeatured = index % 5 === 0;
                  return (
-                   <ItemCard
-                     key={item.id}
-                     item={item}
+                   <ItemCard 
+                     key={item.id} 
+                     item={item} 
                      featured={isFeatured}
-                     className={isFeatured ? 'md:col-span-2 md:row-span-2' : ''}
-                     onToggleStatus={session ? handleToggleStatus : undefined}
-                     onDelete={session ? handleDeleteItem : undefined}
+                     className={isFeatured ? 'md:col-span-2 md:row-span-2' : ''} 
+                     onToggleStatus={handleToggleStatus}
+                     onDelete={handleDeleteItem}
                    />
                  );
                })
              )}
           </div>
         ) : (
-          <MapView items={filteredItems} onToggleStatus={session ? handleToggleStatus : undefined} onDelete={session ? handleDeleteItem : undefined} />
+          <MapView items={filteredItems} onToggleStatus={handleToggleStatus} onDelete={handleDeleteItem} />
         )}
       </main>
 
