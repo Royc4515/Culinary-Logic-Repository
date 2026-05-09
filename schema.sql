@@ -1,42 +1,51 @@
--- Safe RLS Migration — paste into the Supabase SQL Editor.
--- This script does NOT drop or recreate the table; all existing data is preserved.
+-- Copy and paste this into the SQL Editor in your Supabase Dashboard
 
--- Step 1: Make user_id nullable so the Telegram bot can insert rows.
--- The Python backend uses SUPABASE_SERVICE_ROLE_KEY, which operates outside the
--- Supabase auth context. auth.uid() therefore returns NULL in that context, and a
--- NOT NULL constraint would reject every bot insert with a constraint violation.
-ALTER TABLE culinary_items ALTER COLUMN user_id DROP NOT NULL;
+-- Drop existing tables and types so this script can be re-run cleanly
+DROP TABLE IF EXISTS culinary_items;
+DROP TYPE IF EXISTS item_type;
+DROP TYPE IF EXISTS item_status;
 
--- Step 2: Remove the old per-user policies.
-DROP POLICY IF EXISTS "Users can view own items" ON culinary_items;
-DROP POLICY IF EXISTS "Users can insert own items" ON culinary_items;
-DROP POLICY IF EXISTS "Users can update own items" ON culinary_items;
-DROP POLICY IF EXISTS "Users can delete own items" ON culinary_items;
+-- 1. Create Enums for type and status to ensure data integrity
+CREATE TYPE item_type AS ENUM ('PLACE', 'RECIPE', 'GEAR');
+CREATE TYPE item_status AS ENUM ('SAVED', 'EXPERIENCED');
 
--- Step 3: Create the new two-tier policies.
+-- 2. Create the main table
+CREATE TABLE culinary_items (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users NOT NULL DEFAULT auth.uid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    type item_type NOT NULL,
+    title TEXT NOT NULL,
+    thumbnail_url TEXT NOT NULL,
+    context_tags TEXT[] DEFAULT '{}',
+    original_url TEXT,
+    status item_status DEFAULT 'SAVED',
+    specific_data JSONB DEFAULT '{}'::jsonb
+);
 
--- Public SELECT: the gallery loads for any visitor without requiring a login.
--- The anon key (used by the React frontend) satisfies this policy.
-CREATE POLICY "Public read access"
+-- 3. Set up Row Level Security (RLS) policies
+ALTER TABLE culinary_items ENABLE ROW LEVEL SECURITY;
+
+-- Allow users to view only their own items
+CREATE POLICY "Users can view own items"
 ON culinary_items
 FOR SELECT
-USING (true);
+USING (auth.uid() = user_id);
 
--- Admin-only writes: only a signed-in user (the admin via Google OAuth) can
--- mutate data through the React frontend.
--- The Telegram bot bypasses all RLS via the service_role key — these three
--- policies do not affect it.
-CREATE POLICY "Admin insert access"
+-- Allow users to insert their own items
+CREATE POLICY "Users can insert own items"
 ON culinary_items
 FOR INSERT
-WITH CHECK (auth.role() = 'authenticated');
+WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Admin update access"
+-- Allow users to update their own items
+CREATE POLICY "Users can update own items"
 ON culinary_items
 FOR UPDATE
-USING (auth.role() = 'authenticated');
+USING (auth.uid() = user_id);
 
-CREATE POLICY "Admin delete access"
+-- Allow users to delete their own items
+CREATE POLICY "Users can delete own items"
 ON culinary_items
 FOR DELETE
-USING (auth.role() = 'authenticated');
+USING (auth.uid() = user_id);
