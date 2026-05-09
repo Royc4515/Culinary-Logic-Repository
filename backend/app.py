@@ -41,11 +41,42 @@ def extract_url(text):
     return urls[0] if urls else None
 
 def scrape_metadata(url):
-    """Scrapes basic OpenGraph metadata from a URL."""
+    """Scrapes OpenGraph metadata from a URL using Microlink as a robust extraction API, with a fallback to basic requests."""
     try:
-        # Note: In production, Instagram/TikTok might require Apify or specialized scrapers
-        # due to anti-bot mechanisms.
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        # Use Microlink API to handle JS-rendered and anti-bot protected sites like Instagram/TikTok
+        microlink_url = f"https://api.microlink.io?url={url}"
+        
+        # Optional: Un-comment and use if you have a Microlink Pro plan
+        # headers = {'x-api-key': os.getenv('MICROLINK_API_KEY')}
+        # response = requests.get(microlink_url, headers=headers, timeout=10)
+        
+        response = requests.get(microlink_url, timeout=10)
+        
+        if response.status_code == 200:
+            res_json = response.json()
+            if res_json.get('status') == 'success':
+                data = res_json.get('data', {})
+                title = data.get('title', "Unknown Title")
+                description = data.get('description', "")
+                
+                # Image could be a string or a dict
+                image_data = data.get('image')
+                thumbnail_url = ""
+                if isinstance(image_data, dict):
+                    thumbnail_url = image_data.get('url', "")
+                elif isinstance(image_data, str):
+                    thumbnail_url = image_data
+                    
+                if not thumbnail_url:
+                    thumbnail_url = "https://via.placeholder.com/400?text=No+Thumbnail"
+                    
+                return thumbnail_url, title, description
+    except Exception as e:
+        print(f"Microlink API error for {url}: {e}")
+
+    # Fallback to standard requests + BeautifulSoup if Microlink fails or rate limits
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=5)
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -55,13 +86,13 @@ def scrape_metadata(url):
         og_desc = soup.find('meta', property='og:description')
         
         # Fallbacks
-        title = og_title['content'] if og_title else soup.title.string if soup.title else ""
+        title = og_title['content'] if og_title else soup.title.string if soup.title else "Unknown Title"
         description = og_desc['content'] if og_desc else ""
         thumbnail_url = og_image['content'] if og_image else "https://via.placeholder.com/400?text=No+Thumbnail"
         
         return thumbnail_url, title, description
     except Exception as e:
-        print(f"Scraping error for {url}: {e}")
+        print(f"Fallback scraping error for {url}: {e}")
         return "https://via.placeholder.com/400?text=Extraction+Failed", "Unknown Title", ""
 
 def geocode_address(address):

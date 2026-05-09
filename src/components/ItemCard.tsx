@@ -3,18 +3,21 @@ import { CulinaryItem } from '../data/mockData';
 import { MapPin, Clock, ChefHat, Wrench, Bookmark, Star, ChevronDown, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import ItemDetailModal from './ItemDetailModal';
+
 interface Props {
   item: CulinaryItem;
   className?: string;
   key?: string;
   featured?: boolean;
   onToggleStatus?: (id: string) => void;
+  onDelete?: (id: string) => void;
   isMinimal?: boolean;
 }
 
-export default function ItemCard({ item, className = '', featured = false, onToggleStatus, isMinimal = false }: Props) {
+export default function ItemCard({ item, className = '', featured = false, onToggleStatus, onDelete, isMinimal = false }: Props) {
   const isExperienced = item.status === 'EXPERIENCED';
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleShare = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -49,11 +52,12 @@ export default function ItemCard({ item, className = '', featured = false, onTog
   };
 
   return (
+    <>
     <motion.div 
       layout
       initial={{ borderRadius: 16 }}
-      onClick={() => setIsExpanded(!isExpanded)}
-      className={`group relative bg-white rounded-2xl overflow-hidden shadow-[var(--shadow-card)] transition-all duration-300 border border-stone-100 flex flex-col cursor-pointer ${className} ${!isExpanded ? 'hover:-translate-y-1 hover:shadow-lg' : 'shadow-md ring-1 ring-[var(--color-accent)] ring-opacity-20'}`}
+      onClick={() => setIsModalOpen(true)}
+      className={`group relative bg-white rounded-2xl overflow-hidden shadow-[var(--shadow-card)] transition-all duration-300 border border-stone-100 flex flex-col cursor-pointer ${className} ${!isModalOpen ? 'hover:-translate-y-1 hover:shadow-lg' : 'shadow-md ring-1 ring-[var(--color-accent)] ring-opacity-20'}`}
     >
       
       {/* Media Zone */}
@@ -146,96 +150,10 @@ export default function ItemCard({ item, className = '', featured = false, onTog
           {/* Secondary Info / Review */}
           <motion.div layout className="mt-auto">
             {item.personal_review && (
-              <motion.p layout className={`text-sm text-stone-500 leading-relaxed mb-4 ${isExpanded ? '' : 'line-clamp-2'}`}>
+              <motion.p layout className={`text-sm text-stone-500 leading-relaxed mb-4 line-clamp-2`}>
                 {item.personal_review}
               </motion.p>
             )}
-
-            <AnimatePresence>
-              {isExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-4 pt-4 border-t border-stone-100 mb-4 text-sm text-stone-500">
-                    {item.type === 'RECIPE' && (
-                      <div className="mb-2">
-                        <div className="flex flex-wrap gap-4 mb-3 text-xs text-stone-600">
-                          {!!item.specific_data.prep_time_minutes && <div><span className="font-bold">Prep:</span> {item.specific_data.prep_time_minutes}m</div>}
-                          {!!item.specific_data.cook_time_minutes && <div><span className="font-bold">Cook:</span> {item.specific_data.cook_time_minutes}m</div>}
-                          {item.specific_data.serving_size && <div><span className="font-bold">Servings:</span> {item.specific_data.serving_size}</div>}
-                          {item.specific_data.difficulty && <div><span className="font-bold">Difficulty:</span> {item.specific_data.difficulty}</div>}
-                        </div>
-                        {item.specific_data.ingredients?.length > 0 && (
-                          <>
-                            <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-2">Ingredients</h4>
-                            <ul className="space-y-1">
-                              {item.specific_data.ingredients.map((ing: string, i: number) => (
-                                <li key={i} className="flex gap-2"><span className="text-stone-300">•</span> {ing}</li>
-                              ))}
-                            </ul>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {item.type === 'PLACE' && item.specific_data.location && (
-                      <div className="mb-2">
-                        <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Full Address</h4>
-                        <p>{item.specific_data.location.address}</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {item.specific_data.website && (
-                            <a href={item.specific_data.website} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Website</a>
-                          )}
-                          {item.specific_data.wolt_url && (
-                            <a href={item.specific_data.wolt_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Wolt</a>
-                          )}
-                          {item.specific_data.instagram_url && (
-                            <a href={item.specific_data.instagram_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Instagram</a>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {item.type === 'GEAR' && (
-                      <div className="mb-2">
-                        <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Details</h4>
-                        <p>Brand: {item.specific_data.brand}</p>
-                        <p>Price: {item.specific_data.price}</p>
-                        {item.specific_data.purchase_link && (
-                          <p className="mt-1 mb-2">
-                            Link:{' '}
-                            <a
-                              href={item.specific_data.purchase_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[var(--color-accent)] hover:underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              View Store
-                            </a>
-                          </p>
-                        )}
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if(item.specific_data.purchase_link) {
-                              window.open(item.specific_data.purchase_link, '_blank');
-                            } else if (item.original_url) {
-                              window.open(item.original_url, '_blank');
-                            }
-                          }}
-                          className="mt-2 py-1.5 px-3 bg-stone-800 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-stone-700 transition-colors"
-                        >
-                          View Specs
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             {/* Specific Data Snippet */}
             <motion.div layout className="text-[10px] text-stone-400 font-bold uppercase tracking-widest flex items-center justify-between gap-2 mt-2">
@@ -253,7 +171,6 @@ export default function ItemCard({ item, className = '', featured = false, onTog
                   <span className="flex items-center gap-1.5"><Wrench className="w-3 h-3"/> {item.specific_data.brand} • {item.specific_data.price}</span>
                 )}
               </div>
-              <ChevronDown className={`w-4 h-4 text-stone-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
             </motion.div>
           </motion.div>
         </motion.div>
@@ -263,100 +180,21 @@ export default function ItemCard({ item, className = '', featured = false, onTog
       {featured && (
          <motion.div layout className="p-6 bg-white flex flex-col flex-grow justify-between border-t border-stone-100">
             {item.personal_review && (
-              <motion.p layout className={`text-sm text-stone-500 leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+              <motion.p layout className={`text-sm text-stone-500 leading-relaxed line-clamp-2`}>
                 {item.personal_review}
               </motion.p>
             )}
-
-            <AnimatePresence>
-              {isExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-4 pt-4 border-t border-stone-100 mb-2 text-sm text-stone-500">
-                    {item.type === 'RECIPE' && (
-                      <div className="mb-2">
-                        <div className="flex flex-wrap gap-4 mb-3 text-xs text-stone-600">
-                          {!!item.specific_data.prep_time_minutes && <div><span className="font-bold">Prep:</span> {item.specific_data.prep_time_minutes}m</div>}
-                          {!!item.specific_data.cook_time_minutes && <div><span className="font-bold">Cook:</span> {item.specific_data.cook_time_minutes}m</div>}
-                          {item.specific_data.serving_size && <div><span className="font-bold">Servings:</span> {item.specific_data.serving_size}</div>}
-                          {item.specific_data.difficulty && <div><span className="font-bold">Difficulty:</span> {item.specific_data.difficulty}</div>}
-                        </div>
-                        {item.specific_data.ingredients?.length > 0 && (
-                          <>
-                            <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-2">Ingredients</h4>
-                            <ul className="space-y-1">
-                              {item.specific_data.ingredients.map((ing: string, i: number) => (
-                                <li key={i} className="flex gap-2"><span className="text-stone-300">•</span> {ing}</li>
-                              ))}
-                            </ul>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {item.type === 'PLACE' && item.specific_data.location && (
-                      <div className="mb-2">
-                        <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Full Address</h4>
-                        <p>{item.specific_data.location.address}</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {item.specific_data.website && (
-                            <a href={item.specific_data.website} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Website</a>
-                          )}
-                          {item.specific_data.wolt_url && (
-                            <a href={item.specific_data.wolt_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Wolt</a>
-                          )}
-                          {item.specific_data.instagram_url && (
-                            <a href={item.specific_data.instagram_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-accent)] hover:underline" onClick={e => e.stopPropagation()}>Instagram</a>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {item.type === 'GEAR' && (
-                      <div className="mb-2">
-                        <h4 className="text-[10px] font-bold text-stone-800 uppercase tracking-widest mb-1">Details</h4>
-                        <p>Brand: {item.specific_data.brand}</p>
-                        <p>Price: {item.specific_data.price}</p>
-                        {item.specific_data.purchase_link && (
-                          <p className="mt-1">
-                            Link:{' '}
-                            <a
-                              href={item.specific_data.purchase_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[var(--color-accent)] hover:underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              View Store
-                            </a>
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
 
             <motion.div layout className="mt-4 pt-4 border-t border-stone-100 flex items-center justify-between">
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isExperienced ? 'bg-green-50 text-green-700' : 'bg-stone-50 text-stone-500'}`}>
                 Status: {item.status.toLowerCase()}
               </span>
               <div className="flex items-center gap-3">
-                <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                 <button 
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if(item.type === 'GEAR' && item.specific_data.purchase_link) {
-                      window.open(item.specific_data.purchase_link, '_blank');
-                    } else if (item.original_url) {
-                      window.open(item.original_url, '_blank');
-                    } else {
-                      alert(`Opening details for ${item.title}`);
-                    }
+                    setIsModalOpen(true);
                   }}
                   className="py-2 px-4 bg-stone-800 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-stone-700 transition-colors">
                   View Specs
@@ -366,5 +204,14 @@ export default function ItemCard({ item, className = '', featured = false, onTog
          </motion.div>
       )}
     </motion.div>
+
+    <ItemDetailModal 
+      item={item}
+      isOpen={isModalOpen}
+      onClose={() => setIsModalOpen(false)}
+      onToggleStatus={onToggleStatus}
+      onDelete={onDelete}
+    />
+    </>
   );
 }

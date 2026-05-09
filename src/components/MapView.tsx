@@ -13,9 +13,10 @@ const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
 interface MapViewProps {
   items: CulinaryItem[];
   onToggleStatus: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-function MarkerWithInfoWindow({ place, onToggleStatus }: { place: CulinaryItem; onToggleStatus: (id: string) => void }) {
+const MarkerWithInfoWindow: React.FC<{ place: CulinaryItem; onToggleStatus: (id: string) => void; onDelete?: (id: string) => void; keyProp?: string }> = ({ place, onToggleStatus, onDelete, keyProp }) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
   const [open, setOpen] = useState(false);
 
@@ -36,6 +37,7 @@ function MarkerWithInfoWindow({ place, onToggleStatus }: { place: CulinaryItem; 
                   item={place} 
                   featured={false} 
                   onToggleStatus={onToggleStatus} 
+                  onDelete={onDelete}
                   isMinimal={true}
               />
             </div>
@@ -45,7 +47,7 @@ function MarkerWithInfoWindow({ place, onToggleStatus }: { place: CulinaryItem; 
   );
 }
 
-export default function MapView({ items, onToggleStatus }: MapViewProps) {
+export default function MapView({ items, onToggleStatus, onDelete }: MapViewProps) {
   if (!hasValidKey) {
     return (
       <div className="bg-white rounded-2xl overflow-hidden border border-stone-100 shadow-[var(--shadow-card)] h-[600px] w-full flex items-center justify-center p-8 text-center">
@@ -90,8 +92,10 @@ export default function MapView({ items, onToggleStatus }: MapViewProps) {
           {places.map((place) => (
             <MarkerWithInfoWindow 
               key={place.id} 
+              keyProp={place.id}
               place={place} 
               onToggleStatus={onToggleStatus} 
+              onDelete={onDelete}
             />
           ))}
         </Map>

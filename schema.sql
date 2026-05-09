@@ -1,5 +1,10 @@
 -- Copy and paste this into the SQL Editor in your Supabase Dashboard
 
+-- Drop existing tables and types so this script can be re-run cleanly
+DROP TABLE IF EXISTS culinary_items;
+DROP TYPE IF EXISTS item_type;
+DROP TYPE IF EXISTS item_status;
+
 -- 1. Create Enums for type and status to ensure data integrity
 CREATE TYPE item_type AS ENUM ('PLACE', 'RECIPE', 'GEAR');
 CREATE TYPE item_status AS ENUM ('SAVED', 'EXPERIENCED');
@@ -7,6 +12,7 @@ CREATE TYPE item_status AS ENUM ('SAVED', 'EXPERIENCED');
 -- 2. Create the main table
 CREATE TABLE culinary_items (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users NOT NULL DEFAULT auth.uid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     type item_type NOT NULL,
     title TEXT NOT NULL,
@@ -18,32 +24,28 @@ CREATE TABLE culinary_items (
 );
 
 -- 3. Set up Row Level Security (RLS) policies
--- Note: Since you are connecting via the anonymous key on the frontend right now,
--- you either need to enable these policies or turn off RLS for testing.
-
--- Turn on RLS
 ALTER TABLE culinary_items ENABLE ROW LEVEL SECURITY;
 
--- Allow read access to anyone (for the frontend app)
-CREATE POLICY "Allow public read access"
+-- Allow users to view only their own items
+CREATE POLICY "Users can view own items"
 ON culinary_items
 FOR SELECT
-USING (true);
+USING (auth.uid() = user_id);
 
--- Allow insert access to anyone (for the frontend add manually option)
-CREATE POLICY "Allow public insert access"
+-- Allow users to insert their own items
+CREATE POLICY "Users can insert own items"
 ON culinary_items
 FOR INSERT
-WITH CHECK (true);
+WITH CHECK (auth.uid() = user_id);
 
--- Allow update access to anyone (for the frontend toggle status option)
-CREATE POLICY "Allow public update access"
+-- Allow users to update their own items
+CREATE POLICY "Users can update own items"
 ON culinary_items
 FOR UPDATE
-USING (true);
+USING (auth.uid() = user_id);
 
--- Allow delete access to anyone (if you want this feature later)
-CREATE POLICY "Allow public delete access"
+-- Allow users to delete their own items
+CREATE POLICY "Users can delete own items"
 ON culinary_items
 FOR DELETE
-USING (true);
+USING (auth.uid() = user_id);

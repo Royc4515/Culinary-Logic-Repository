@@ -91,9 +91,8 @@ export default function AddManualItemModal({ isOpen, onClose, onItemAdded }: Add
       // Logic for when Supabase is not connected (mock data mode)
       const mockItem: CulinaryItem = {
         id: Math.random().toString(36).substr(2, 9),
-        created_at: new Date().toISOString(),
         ...payload
-      };
+      } as unknown as CulinaryItem;
       onItemAdded(mockItem);
       setIsSubmitting(false);
       onClose();

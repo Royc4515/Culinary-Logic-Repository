@@ -1,21 +1,84 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Map, Grid, Search, Filter, Plus } from 'lucide-react';
+import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles } from 'lucide-react';
 import { mockItems, CulinaryItem } from './data/mockData';
 import ItemCard from './components/ItemCard';
 import EmptyState from './components/EmptyState';
 import AddManualItemModal from './components/AddManualItemModal';
+import AddSmartItemModal from './components/AddSmartItemModal';
 import MapView from './components/MapView';
+import AuthScreen from './components/AuthScreen';
 import { supabase } from './lib/supabase';
 
 type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
 
 export default function App() {
+  const [session, setSession] = useState<any>(null);
   const [items, setItems] = useState<CulinaryItem[]>(supabase ? [] : mockItems);
   const [viewMode, setViewMode] = useState<ViewMode>('GALLERY');
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<CulinaryItem['type'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
+  const [isInitializingAuth, setIsInitializingAuth] = useState(true);
+
+  useEffect(() => {
+    if (!supabase) {
+      setIsInitializingAuth(false);
+      return;
+    }
+
+    // 1. If we are the popup, we receive the token in the URL hash.
+    // Send it to the parent window and close ourselves.
+    if (window.opener && window.name === 'oauth_popup') {
+      if (window.location.hash && window.location.hash.includes('access_token=')) {
+        window.opener.postMessage({ type: 'SUPABASE_AUTH_HASH', hash: window.location.hash }, '*');
+        window.close();
+      }
+    }
+
+    // 2. If we are the parent window, listen for the message from the popup.
+    const handleMessage = async (e: MessageEvent) => {
+      if (e.data?.type === 'SUPABASE_AUTH_HASH') {
+        const hash = e.data.hash;
+        const params = new URLSearchParams(hash.replace('#', '?'));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+          if (data.session) {
+            setSession(data.session);
+          }
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsInitializingAuth(false);
+      if (session && window.opener && window.name === 'oauth_popup') {
+        window.close(); // fallback close
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session && window.opener && window.name === 'oauth_popup') {
+        window.close(); // fallback close
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('message', handleMessage);
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchItems() {
@@ -31,8 +94,18 @@ export default function App() {
         setItems(data as CulinaryItem[]);
       }
     }
-    fetchItems();
-  }, []);
+    
+    if (!supabase || session) {
+      fetchItems();
+    }
+  }, [session]);
+
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
+      setItems([]);
+    }
+  };
 
   const relevantItems = useMemo(() => {
     let result = items;
@@ -98,7 +171,8 @@ export default function App() {
       const q = searchQuery.toLowerCase();
       result = result.filter(item => 
         item.title.toLowerCase().includes(q) || 
-        item.context_tags.some(tag => tag.toLowerCase().includes(q))
+        item.context_tags.some(tag => tag.toLowerCase().includes(q)) ||
+        item.type.toLowerCase().includes(q)
       );
     }
 
@@ -118,7 +192,9 @@ export default function App() {
         : item
     ));
 
-    if (supabase) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    if (supabase && isUuid) {
       // Database update
       const { error } = await supabase
         .from('culinary_items')
@@ -136,6 +212,36 @@ export default function App() {
       }
     }
   };
+
+  const handleDeleteItem = async (id: string) => {
+    // Optimistic UI update
+    const previousItems = [...items];
+    setItems(prev => prev.filter(item => item.id !== id));
+
+    // Simple UUID check: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    if (supabase && isUuid) {
+      const { error } = await supabase
+        .from('culinary_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting item:', error);
+        // Revert on error
+        setItems(previousItems);
+      }
+    }
+  };
+
+  if (isInitializingAuth) {
+    return <div className="min-h-screen flex items-center justify-center bg-stone-50"><p className="text-stone-500 font-bold uppercase tracking-widest text-xs">Loading...</p></div>;
+  }
+
+  if (supabase && !session) {
+    return <AuthScreen />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -193,7 +299,14 @@ export default function App() {
             </div>
 
             {/* Mobile Actions */}
-            <div className="lg:hidden flex items-center gap-3 shrink-0">
+            <div className="lg:hidden flex items-center gap-2 shrink-0">
+              <button 
+                onClick={() => setIsSmartModalOpen(true)}
+                className="h-8 px-3 bg-stone-800 rounded-full flex items-center gap-1.5 justify-center text-white shadow-lg hover:bg-stone-700 transition-colors text-[10px] font-bold uppercase"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+                <span className="hidden sm:inline">Smart Add</span>
+              </button>
               <button 
                 onClick={() => setIsAddModalOpen(true)}
                 className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
@@ -201,9 +314,11 @@ export default function App() {
               >
                 <Plus className="w-4 h-4" />
               </button>
-              <div className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
-                RC
-              </div>
+              {supabase && (
+                <button onClick={handleLogout} className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
+                  <LogOut className="w-3 h-3" />
+                </button>
+              )}
             </div>
         </div>
 
@@ -297,17 +412,26 @@ export default function App() {
             ))}
           </div>
           
-          <div className="hidden lg:flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-3">
+            <button
+              onClick={() => setIsSmartModalOpen(true)}
+              className="flex items-center gap-2 px-4 h-10 bg-stone-800 text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-stone-700 hover:opacity-90 transition-all shrink-0"
+            >
+              <Sparkles className="w-4 h-4 text-blue-300" />
+              Smart Add
+            </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 px-4 h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
+              className="flex items-center gap-2 w-10 justify-center h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
+              title="Add Manual"
             >
               <Plus className="w-4 h-4" />
-              Add Item
             </button>
-            <div className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
-              RC
-            </div>
+            {supabase && (
+              <button onClick={handleLogout} className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-stone-700 transition">
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -336,13 +460,14 @@ export default function App() {
                      featured={isFeatured}
                      className={isFeatured ? 'md:col-span-2 md:row-span-2' : ''} 
                      onToggleStatus={handleToggleStatus}
+                     onDelete={handleDeleteItem}
                    />
                  );
                })
              )}
           </div>
         ) : (
-          <MapView items={filteredItems} onToggleStatus={handleToggleStatus} />
+          <MapView items={filteredItems} onToggleStatus={handleToggleStatus} onDelete={handleDeleteItem} />
         )}
       </main>
 
@@ -356,6 +481,11 @@ export default function App() {
       <AddManualItemModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
+      />
+      <AddSmartItemModal
+        isOpen={isSmartModalOpen}
+        onClose={() => setIsSmartModalOpen(false)}
         onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
       />
     </div>
