@@ -13,14 +13,28 @@ export default function AuthScreen() {
     setError(null);
 
     try {
-      const appUrl = import.meta.env.VITE_APP_URL;
-      const redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
+      let redirectUrl = window.location.origin + '/';
+      if (window.location.origin.includes('localhost')) {
+         // Inside AI Studio iframe, we must use the exposed tunnel URL so the popup works
+         redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
+      }
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: redirectUrl },
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        }
       });
       if (error) throw error;
+
+      if (data?.url) {
+        const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
+        if (!authWindow) {
+           setError('Please allow popups to sign in with Google.');
+           setLoading(false);
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
       setLoading(false);

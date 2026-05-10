@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CulinaryItem } from '../data/mockData';
-import { MapPin, Clock, ChefHat, Wrench, Bookmark, Star, ChevronDown, Share2 } from 'lucide-react';
+import { MapPin, Clock, ChefHat, Wrench, Bookmark, Star, ChevronDown, Share2, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import ItemDetailModal from './ItemDetailModal';
@@ -76,6 +76,12 @@ export default function ItemCard({ item, className = '', featured = false, onTog
               {getTypeIcon()}
               {item.type}
             </span>
+            {item.specific_data?.telegram_id && (
+               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#24A1DE] text-white uppercase tracking-tighter shadow-sm blur-none backdrop-blur-md opacity-90">
+                 <Send className="w-2.5 h-2.5" />
+                 via Telegram
+               </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button 
