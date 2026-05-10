@@ -116,6 +116,11 @@ export default function ItemCard({ item, className = '', featured = false, onTog
             <h3 className="font-serif font-bold text-3xl sm:text-4xl leading-tight text-white mb-2">
               {item.title}
             </h3>
+            {item.specific_data?.description && (
+              <p className="text-white/80 text-sm leading-relaxed mb-3 line-clamp-2">
+                {item.specific_data.description}
+              </p>
+            )}
             {item.rating && (
               <div className="flex items-center gap-1 text-[var(--color-accent)] text-sm font-bold">
                 {'★'.repeat(item.rating)}{'☆'.repeat(5-item.rating)}
@@ -128,29 +133,28 @@ export default function ItemCard({ item, className = '', featured = false, onTog
       {/* Content Layer (Only if not fully featured overlaid, or we keep it for extra details) */}
       {!featured && (
         <motion.div layout className="p-6 flex flex-col flex-grow">
-          <motion.div layout className="flex justify-between items-start mb-2">
-            <h3 className="font-serif font-bold text-xl leading-tight text-[var(--color-primary-text)]">
-              {item.title}
-            </h3>
-            {item.specific_data?.description && (
-              <p className="text-stone-500 text-xs leading-relaxed mt-1 line-clamp-2">
-                {item.specific_data.description}
-              </p>
-            )}
+          <motion.div layout className="flex justify-between items-start mb-4">
+            <div className="flex flex-col flex-grow min-w-0 pr-4">
+              <h3 className="font-serif font-bold text-xl leading-tight text-[var(--color-primary-text)]">
+                {item.title}
+              </h3>
+              {item.specific_data?.description && (
+                <p className="text-stone-500 text-[11px] leading-relaxed mt-1 line-clamp-2">
+                  {item.specific_data.description}
+                </p>
+              )}
+            </div>
             {item.type === 'PLACE' && (item.specific_data as any)?.rating && (
-              <div className="flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-widest text-amber-600">
+              <div className="flex items-center gap-1 mt-1 text-[10px] font-bold uppercase tracking-widest text-amber-600 shrink-0">
                 <span>★</span>
                 <span>{(item.specific_data as any).rating}</span>
                 {(item.specific_data as any).ratings_count && (
                   <span className="text-stone-400">({(item.specific_data as any).ratings_count})</span>
                 )}
-                {(item.specific_data as any).price_range && (
-                  <span className="ml-2 text-stone-400">· {(item.specific_data as any).price_range}</span>
-                )}
               </div>
             )}
-            {item.rating && (
-              <div className="flex items-center gap-1 text-[var(--color-accent)] text-xs font-bold tracking-widest mt-1">
+            {item.rating && !((item.specific_data as any)?.rating) && (
+              <div className="flex items-center gap-1 text-[var(--color-accent)] text-xs font-bold tracking-widest mt-1 shrink-0">
                 {'★'.repeat(item.rating)}
               </div>
             )}
@@ -202,11 +206,18 @@ export default function ItemCard({ item, className = '', featured = false, onTog
       {/* If featured, show fewer details at the bottom or an expanded review */}
       {featured && (
          <motion.div layout className="p-6 bg-white flex flex-col flex-grow justify-between border-t border-stone-100">
-            {item.personal_review && (
-              <motion.p layout className={`text-sm text-stone-500 leading-relaxed line-clamp-2`}>
-                {item.personal_review}
-              </motion.p>
-            )}
+            <div>
+              {item.specific_data?.description && (
+                <p className="text-stone-500 text-sm leading-relaxed mb-3">
+                  {item.specific_data.description}
+                </p>
+              )}
+              {item.personal_review && (
+                <motion.p layout className={`text-sm text-stone-700 italic leading-relaxed line-clamp-2 bg-stone-50 p-3 rounded-xl`}>
+                  "{item.personal_review}"
+                </motion.p>
+              )}
+            </div>
 
             <motion.div layout className="mt-4 pt-4 border-t border-stone-100 flex items-center justify-between">
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isExperienced ? 'bg-green-50 text-green-700' : 'bg-stone-50 text-stone-500'}`}>

@@ -1,6 +1,5 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
 import * as dotenv from 'dotenv';
@@ -12,9 +11,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const MAPS_API_KEY = process.env.MAPS_API_KEY; // Optional for geocoding
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 async function sendTelegramMessage(chatId: string | number, text: string) {
@@ -158,71 +155,18 @@ async function startServer() {
       return;
     }
     
-    // 3. LLM Parsing
-    const prompt = `You are a culinary data extractor. Analyze the following text and metadata to extract structured data for a Culinary Logic Repository database.
-Make sure to generate a relevant 'thumbnail_url' if none is given.
-
-Url: ${url}
-Scraped Title: ${scrapedTitle}
-Scraped Description: ${scrapedCaption}
-User Input: "${text}"`;
-
-    const responseSchema = {
-        type: "OBJECT",
-        properties: {
-          type: { type: "STRING", description: "Must be 'PLACE', 'RECIPE', or 'GEAR'" },
-          title: { type: "STRING", description: "Name of the place, recipe or gear." },
-          thumbnail_url: { type: "STRING", description: "An image URL (if present in the text) or an empty string" },
-          context_tags: { type: "ARRAY", items: { type: "STRING" }, description: "3-5 relevant short tags like 'Italian', 'Date Night', etc." },
-          specific_data: {
-            type: "OBJECT",
-            properties: {
-              location: {
-                type: "OBJECT",
-                properties: {
-                  address: { type: "STRING" },
-                  lat: { type: "NUMBER" },
-                  lng: { type: "NUMBER" }
-                }
-              },
-              prep_time_minutes: { type: "NUMBER" },
-              cook_time_minutes: { type: "NUMBER" },
-              difficulty: { type: "STRING" },
-              ingredients: { type: "ARRAY", items: { type: "STRING" } },
-              brand: { type: "STRING" },
-              price: { type: "STRING" },
-              purchase_link: { type: "STRING" }
-            }
-          }
-        },
-        required: ["type", "title", "context_tags", "specific_data"],
+    // 3. Fallback Parsing without LLM
+    let extractedData = {
+        type: "PLACE",
+        title: scrapedTitle || "New Link",
+        thumbnail_url: thumbnailUrl,
+        context_tags: [],
+        specific_data: { location: { address: "", lat: 0, lng: 0 } }
     };
-
-    let extractedData;
-    try {
-      const gResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: responseSchema as any,
-          tools: [{ googleSearch: {} }],
-        }
-      });
-      
-      let dataText = gResponse.text || "{}";
-      dataText = dataText.replace(/```(?:json)?/g, '').trim();
-      extractedData = JSON.parse(dataText);
-    } catch (e: any) {
-      console.error("Gemini Error:", e);
-      await sendTelegramMessage(chatId, "❌ Failed to parse context with LLM.");
-      res.status(500).json({ status: "error", message: e.message });
-      return;
-    }
     
     // 4. Server-Side Geocoding
     const itemType = extractedData.type || "PLACE";
-    const specificData = extractedData.specific_data || {};
+    const specificData: any = extractedData.specific_data || {};
     
     if (itemType === "PLACE" && specificData.location?.address) {
       const geo = await geocodeAddress(specificData.location.address);

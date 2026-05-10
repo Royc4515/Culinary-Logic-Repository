@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles, Send } from 'lucide-react';
+import { Map, Search, Filter, Plus, LogOut, Send } from 'lucide-react';
 import { mockItems, CulinaryItem } from './data/mockData';
 import ItemCard from './components/ItemCard';
 import EmptyState from './components/EmptyState';
 import AddManualItemModal from './components/AddManualItemModal';
-import AddSmartItemModal from './components/AddSmartItemModal';
 import MapView from './components/MapView';
 import AuthScreen from './components/AuthScreen';
 import { supabase } from './lib/supabase';
@@ -20,7 +19,6 @@ export default function App() {
   const [activeType, setActiveType] = useState<CulinaryItem['type'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
   const [isInitializingAuth, setIsInitializingAuth] = useState(true);
 
   // Telegram Link State
@@ -404,13 +402,6 @@ export default function App() {
                  </button>
               )}
               <button 
-                onClick={() => setIsSmartModalOpen(true)}
-                className="h-8 px-3 bg-stone-800 rounded-full flex items-center gap-1.5 justify-center text-white shadow-lg hover:bg-stone-700 transition-colors text-[10px] font-bold uppercase"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
-                <span className="hidden sm:inline">Smart Add</span>
-              </button>
-              <button 
                 onClick={() => setIsAddModalOpen(true)}
                 className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
                 aria-label="Add Item"
@@ -537,13 +528,6 @@ export default function App() {
                )
             )}
             <button
-              onClick={() => setIsSmartModalOpen(true)}
-              className="flex items-center gap-2 px-4 h-10 bg-stone-800 text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-stone-700 hover:opacity-90 transition-all shrink-0"
-            >
-              <Sparkles className="w-4 h-4 text-blue-300" />
-              Smart Add
-            </button>
-            <button
               onClick={() => setIsAddModalOpen(true)}
               className="flex items-center gap-2 w-10 justify-center h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
               title="Add Manual"
@@ -620,11 +604,6 @@ export default function App() {
       <AddManualItemModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
-      />
-      <AddSmartItemModal
-        isOpen={isSmartModalOpen}
-        onClose={() => setIsSmartModalOpen(false)}
         onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
       />
       {pendingLinkData && (
