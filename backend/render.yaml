@@ -3,14 +3,14 @@ services:
     name: clr-backend
     plan: free
     runtime: python
-    # Render runs these commands from the repo root by default.
-    # In the Render dashboard, set "Root Directory" to "backend" so that
-    # requirements.txt and app.py are resolved correctly.
+    # In the Render dashboard, set "Root Directory" to "backend".
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     envVars:
       - key: TELEGRAM_BOT_TOKEN
-        sync: false          # Set manually in the Render dashboard
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
       - key: GROQ_API_KEY
         sync: false
       - key: MAPS_API_KEY

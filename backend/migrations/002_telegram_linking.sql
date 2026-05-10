@@ -23,9 +23,6 @@ create unique index if not exists telegram_links_user_id_idx on public.telegram_
 alter table public.linking_tokens enable row level security;
 alter table public.telegram_links enable row level security;
 
--- Frontend (anon/authenticated) only needs to read its own telegram_links row
--- and delete it (disconnect). All writes from the bot go through service_role
--- which bypasses RLS, so no insert/update policies are needed here.
 drop policy if exists "Users can read their own telegram_links" on public.telegram_links;
 create policy "Users can read their own telegram_links"
 on public.telegram_links
@@ -39,7 +36,3 @@ for delete
 using (auth.uid() = user_id);
 
 -- linking_tokens is service_role only — no frontend access.
-
--- Backfill: existing items have null user_id. Once a user links their Telegram,
--- new items will be tagged with their user_id automatically. Old rows stay
--- visible via the existing public-read policy.

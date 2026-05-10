@@ -146,7 +146,6 @@ def scrape_metadata(url):
     Returns a dict with keys: thumbnail_url, images[], title, description,
     body_excerpt, site_name.
     """
-    # Try Microlink first — handles JS-rendered pages and Instagram/TikTok.
     try:
         microlink_url = f"https://api.microlink.io?url={urllib.parse.quote(url, safe='')}&audio=false&video=false&meta=true"
         response = requests.get(microlink_url, timeout=12)
@@ -176,7 +175,7 @@ def scrape_metadata(url):
                     "images": images,
                     "title": title,
                     "description": description,
-                    "body_excerpt": "",  # Microlink doesn't return body
+                    "body_excerpt": "",
                     "site_name": site_name,
                 }
     except Exception as e:
@@ -206,11 +205,7 @@ PLACES_FIELDS = (
 
 
 def google_places_enrich(query, location_hint=""):
-    """Look up a place via Google Places Text Search → Place Details.
-
-    Returns a dict with rich place data (or {} on failure). Uses MAPS_API_KEY,
-    which must have the Places API enabled.
-    """
+    """Look up a place via Google Places Text Search → Place Details."""
     if not MAPS_API_KEY or not query:
         return {}
 
@@ -305,7 +300,6 @@ def get_user_id_for_telegram(telegram_id):
 
 
 def handle_link_command(message, chat_id, text):
-    """Process /start link_<token> and bind this Telegram chat to a Supabase user."""
     token = text[len("/start link_"):].strip()
     telegram_id = message["from"]["id"]
     username = message["from"].get("username")
@@ -423,8 +417,6 @@ def health_check():
 
 @app.route('/api/link/start', methods=['POST', 'OPTIONS'])
 def link_start():
-    """Frontend calls this with the user's Supabase JWT to mint a one-time
-    deep-link token. Returns { token, expires_at, deep_link }."""
     if request.method == 'OPTIONS':
         return ('', 204)
 
@@ -469,7 +461,6 @@ def link_start():
 
 @app.route('/api/webhook', methods=['POST'])
 def telegram_webhook():
-    """Telegram update ingest."""
     update = request.get_json()
     if not update or "message" not in update:
         return jsonify({"status": "ignored"}), 200
@@ -479,12 +470,10 @@ def telegram_webhook():
     text = (message.get("text") or "").strip()
     telegram_id = message["from"]["id"]
 
-    # Deep-link from website
     if text.startswith("/start link_"):
         handle_link_command(message, chat_id, text)
         return jsonify({"status": "ok"}), 200
 
-    # Bare /start or /help
     if text in ("/start", "/help"):
         handle_help(chat_id)
         return jsonify({"status": "ok"}), 200
@@ -499,13 +488,10 @@ def telegram_webhook():
         handle_undo(chat_id, user_id)
         return jsonify({"status": "ok"}), 200
 
-    # ---------- Item ingest pipeline ----------
     if not text:
         send_message(chat_id, "⚠️ Send me a URL or a text note.")
         return jsonify({"status": "ignored"}), 200
 
-    # Require a linked account: items are now per-user, so an unlinked chat
-    # has nowhere to save the item.
     if not user_id:
         send_message(
             chat_id,
@@ -536,9 +522,6 @@ def telegram_webhook():
         progress("❌ AI service not configured.")
         return jsonify({"status": "error", "message": "Missing Groq configuration"}), 500
 
-    # Pre-LLM Places enrichment: if the scraped title or user text looks like
-    # a real place, hit Google Places now so the LLM can ground its description
-    # in the authoritative facts (rating, phone, hours, photos).
     places_data = {}
     candidate_query = (scraped.get("title") or "").strip()
     if not candidate_query and text:
@@ -594,8 +577,6 @@ def telegram_webhook():
     item_type = extracted_data.get("type", "PLACE")
     specific_data = extracted_data.get("specific_data", {}) or {}
 
-    # Merge Google Places ground truth into the PLACE specific_data and prefer
-    # Places photos (they're the high-quality, on-brand ones).
     photos = []
     if scraped.get("images"):
         photos.extend(scraped["images"])
@@ -617,7 +598,7 @@ def telegram_webhook():
                 specific_data["price_range"] = "$" * int(places_data["price_level"]) if places_data["price_level"] else ""
             for p in places_data.get("photos", []):
                 if p not in photos:
-                    photos.insert(0, p)  # Places photos preferred as primary
+                    photos.insert(0, p)
         if loc.get("address") and (not loc.get("lat") or loc["lat"] == 0):
             progress("📍 Resolving location on map...")
             lat, lng, fmt_address = geocode_address(loc["address"])
@@ -667,7 +648,6 @@ def telegram_webhook():
 
 @app.route('/api/setup', methods=['GET'])
 def setup_webhook():
-    """Dev helper to register the Telegram webhook quickly."""
     webhook_url = request.args.get('url')
     if not webhook_url:
         return jsonify({"error": "Provide ?url=https://your-domain.com/api/webhook"}), 400
