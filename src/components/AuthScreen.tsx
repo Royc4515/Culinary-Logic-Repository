@@ -13,9 +13,11 @@ export default function AuthScreen() {
     setError(null);
 
     try {
-      let redirectUrl = window.location.origin + '/';
-      if (window.location.origin.includes('localhost')) {
-         // Inside AI Studio iframe, we must use the exposed tunnel URL so the popup works
+      // VITE_APP_URL pins the redirect to the canonical deployment URL (e.g. Vercel),
+      // preventing proxies / AI Studio tunnels from becoming the OAuth redirect target.
+      const appUrl = import.meta.env.VITE_APP_URL;
+      let redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
+      if (!appUrl && window.location.origin.includes('localhost')) {
          redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
       }
 
