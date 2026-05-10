@@ -23,6 +23,12 @@ MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
+MODELS_TO_TRY = [
+    "llama-3.3-70b-versatile",   # Primary – High Intelligence
+    "llama-3.1-70b-versatile",   # Backup A – High Reliability
+    "llama-3.1-8b-instant",      # Backup B – High Speed/Availability
+]
+
 # Initialize Services
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 supabase: Client | None = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
@@ -159,27 +165,30 @@ def telegram_webhook():
         
     prompt = get_extraction_prompt(text, scraped_title, scraped_caption)
     
+    chat_completion = None
+    for model in MODELS_TO_TRY:
+        try:
+            chat_completion = groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model=model,
+                temperature=0.1
+            )
+            break
+        except Exception as e:
+            print(f"Groq model {model} failed: {e}")
+
+    if chat_completion is None:
+        send_telegram_message(chat_id, "❌ Failed to parse context with LLM.")
+        return jsonify({"status": "error", "message": "All Groq models failed"}), 500
+
     try:
-        # LLAMA 3 70B is fast and excellent at constraint following a JSON schema
-        chat_completion = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama3-70b-8192",
-            temperature=0.0
-        )
-        
         raw_output = chat_completion.choices[0].message.content
-        # Ensure we just grab the JSON part if there are backticks
         raw_output = raw_output.replace("```json", "").replace("```", "").strip()
         extracted_data = json.loads(raw_output)
-        
     except json.JSONDecodeError as e:
         print(f"Groq JSON parsing error: {e}\nRaw output: {raw_output}")
         send_telegram_message(chat_id, "❌ LLM returned invalid JSON. Please try again.")
         return jsonify({"status": "error", "message": "Invalid JSON from LLM"}), 500
-    except Exception as e:
-        print(f"Groq LLM Error: {e}")
-        send_telegram_message(chat_id, "❌ Failed to parse context with LLM.")
-        return jsonify({"status": "error"}), 500
         
     # 4. Server-Side Geocoding
     item_type = extracted_data.get("type", "PLACE")
