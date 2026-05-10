@@ -13,30 +13,14 @@ export default function AuthScreen() {
     setError(null);
 
     try {
-      // VITE_APP_URL pins the redirect to the canonical deployment URL (e.g. Vercel),
-      // preventing proxies / AI Studio tunnels from becoming the OAuth redirect target.
       const appUrl = import.meta.env.VITE_APP_URL;
-      let redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
-      if (!appUrl && window.location.origin.includes('localhost')) {
-         redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
-      }
+      const redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        }
+        options: { redirectTo: redirectUrl },
       });
       if (error) throw error;
-
-      if (data?.url) {
-        const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
-        if (!authWindow) {
-           setError('Please allow popups to sign in with Google.');
-           setLoading(false);
-        }
-      }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
       setLoading(false);

@@ -9,9 +9,6 @@ import MapView from './components/MapView';
 import AuthScreen from './components/AuthScreen';
 import { supabase } from './lib/supabase';
 
-// Captured at module load — before Supabase's implicit-flow handler can strip it.
-const _initialHash = window.location.hash;
-
 type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
 
 export default function App() {
@@ -31,41 +28,9 @@ export default function App() {
       return;
     }
 
-    // --- POPUP DETECTION ---
-    // window.opener is nulled by Supabase's COOP headers during the redirect chain,
-    // so we detect the popup by the access token in the initial URL hash instead.
-    if (_initialHash.includes('access_token=')) {
-      const params = new URLSearchParams(_initialHash.replace('#', ''));
-      const access_token = params.get('access_token');
-      const refresh_token = params.get('refresh_token');
-      if (access_token && refresh_token) {
-        const payload = { type: 'SUPABASE_AUTH_SESSION', access_token, refresh_token };
-        // BroadcastChannel works when parent and popup share the same origin (direct Vercel access).
-        try { new BroadcastChannel('supabase_auth').postMessage(payload); } catch (_) {}
-        // postMessage fallback for when opener is still available.
-        if (window.opener) window.opener.postMessage(payload, '*');
-        window.close();
-        return () => {};
-      }
-    }
-
-    // --- PARENT WINDOW ---
-    // Listen via BroadcastChannel (same-origin) and window.message (cross-origin fallback).
-    const receiveSession = async (payload: { access_token: string; refresh_token: string }) => {
-      const { data } = await supabase.auth.setSession(payload);
-      if (data.session) setSession(data.session);
-    };
-
-    const bc = new BroadcastChannel('supabase_auth');
-    bc.onmessage = (e) => {
-      if (e.data?.type === 'SUPABASE_AUTH_SESSION') receiveSession(e.data);
-    };
-
-    const handleMessage = (e: MessageEvent) => {
-      if (e.data?.type === 'SUPABASE_AUTH_SESSION') receiveSession(e.data);
-    };
-    window.addEventListener('message', handleMessage);
-
+    // Standard OAuth flow: Supabase auto-detects #access_token in the URL on
+    // load, creates the session, and fires onAuthStateChange. No popup, no
+    // cross-window messaging — same-window redirect handles everything.
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsInitializingAuth(false);
@@ -75,11 +40,7 @@ export default function App() {
       setSession(session);
     });
 
-    return () => {
-      subscription.unsubscribe();
-      bc.close();
-      window.removeEventListener('message', handleMessage);
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -240,19 +201,12 @@ export default function App() {
   const handleAdminLogin = async () => {
     if (!supabase) return;
     const appUrl = import.meta.env.VITE_APP_URL;
-    let redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
-    if (!appUrl && window.location.origin.includes('localhost')) {
-      redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
-    }
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: redirectUrl, skipBrowserRedirect: true },
+      options: { redirectTo: redirectUrl },
     });
-    if (error) { console.error(error); return; }
-    if (data?.url) {
-      const popup = window.open(data.url, 'oauth_popup', 'width=600,height=700');
-      if (!popup) alert('Please allow popups to sign in.');
-    }
+    if (error) console.error(error);
   };
 
   if (isInitializingAuth) {
