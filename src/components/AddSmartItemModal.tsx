@@ -36,15 +36,27 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
       let enhancedInputData = inputData;
       const parsedUrl = extractUrl(inputData);
       
-      // Attempt to enrich with Microlink if a URL is provided
+      // Enrich with Microlink if a URL is provided
       if (parsedUrl) {
         try {
-          const microlinkUrl = `https://api.microlink.io?url=${encodeURIComponent(parsedUrl)}`;
-          const mlResponse = await fetch(microlinkUrl, { signal: AbortSignal.timeout(5000) });
+          const microlinkUrl = `https://api.microlink.io?url=${encodeURIComponent(parsedUrl)}&screenshot=false`;
+          const mlResponse = await fetch(microlinkUrl, { signal: AbortSignal.timeout(6000) });
           const mlData = await mlResponse.json();
           if (mlData.status === 'success' && mlData.data) {
-            const imageUrl = typeof mlData.data.image === 'object' && mlData.data.image !== null ? mlData.data.image.url : (mlData.data.image || 'N/A');
-            enhancedInputData = `Original Input: ${inputData}\n\nExtracted Metadata from URL:\nTitle: ${mlData.data.title || 'N/A'}\nDescription: ${mlData.data.description || 'N/A'}\nImage URL: ${imageUrl}`;
+            const d = mlData.data;
+            const imageUrl = typeof d.image === 'object' && d.image !== null ? d.image.url : (d.image || '');
+            const logoUrl = typeof d.logo === 'object' && d.logo !== null ? d.logo.url : '';
+            const parts = [
+              `Original Input: ${inputData}`,
+              `\nExtracted Metadata from URL (${parsedUrl}):`,
+              `Title: ${d.title || 'N/A'}`,
+              `Site: ${d.publisher || d.author || 'N/A'}`,
+              `Description: ${d.description || 'N/A'}`,
+              imageUrl ? `Image URL: ${imageUrl}` : '',
+              logoUrl ? `Logo URL: ${logoUrl}` : '',
+              d.lang ? `Language: ${d.lang}` : '',
+            ].filter(Boolean);
+            enhancedInputData = parts.join('\n');
           }
         } catch (e) {
           console.warn("Could not fetch metadata for URL", e);
@@ -59,94 +71,136 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
           type: {
             type: "STRING",
             enum: ["PLACE", "RECIPE", "GEAR"],
-            description: "Must be 'PLACE', 'RECIPE', or 'GEAR'",
           },
           title: {
             type: "STRING",
-            description: "Name of the place, recipe or gear. If unknown, use a placeholder.",
+            description: "Canonical name. Cleaned, no emojis.",
+          },
+          description: {
+            type: "STRING",
+            description: "1-2 punchy sentences a friend would say to convince you to try it. Concrete details, not generic praise.",
           },
           thumbnail_url: {
             type: "STRING",
-            description: "An image URL (if present in the text) or an empty string",
+            description: "Image URL from the input or metadata, else empty string",
           },
           original_url: {
             type: "STRING",
-            description: "The source URL if provided",
+            description: "Source URL if provided, else empty string",
           },
           context_tags: {
             type: "ARRAY",
             items: { type: "STRING" },
-            description: "3-5 relevant short tags like 'Italian', 'Date Night', 'Baking', etc.",
+            description: "6-10 specific Title-Case tags mixing: vibe (Date Night, Hidden Gem, Solo Lunch), cuisine (Neapolitan Pizza, Levantine), occasion (Birthday, Brunch), dietary (Vegan, Gluten-Free Friendly), price (Affordable, Splurge), technique (Wood-Fired, Sous-Vide)",
           },
           specific_data: {
             type: "OBJECT",
             properties: {
+              // PLACE fields
               location: {
                 type: "OBJECT",
                 properties: {
-                  address: { type: "STRING", description: "Full address if it's a place" },
-                  lat: { type: "NUMBER", description: "Latitude if known, else 0" },
-                  lng: { type: "NUMBER", description: "Longitude if known, else 0" }
-                }
+                  address: { type: "STRING", description: "Street + city as written" },
+                  lat: { type: "NUMBER", description: "Always 0 — backend geocodes" },
+                  lng: { type: "NUMBER", description: "Always 0 — backend geocodes" },
+                },
               },
-              prep_time_minutes: { type: "NUMBER", description: "If a recipe" },
-              cook_time_minutes: { type: "NUMBER", description: "If a recipe" },
-              difficulty: { 
-                type: "STRING", 
-                enum: ["Easy", "Medium", "Hard"],
-                description: "If a recipe (e.g. Easy, Medium, Hard)" 
-              },
-              ingredients: { 
-                type: "ARRAY", 
-                items: { type: "STRING" },
-                description: "List of ingredients if a recipe"
-              },
-              brand: { type: "STRING", description: "If gear" },
-              price: { type: "STRING", description: "If gear" },
-              purchase_link: { type: "STRING", description: "If gear" }
-            }
-          }
+              cuisine: { type: "STRING", description: "Primary cuisine e.g. 'Modern Israeli', 'Sichuan', 'Coffee & Pastries'" },
+              price_range: { type: "STRING", description: "$ | $$ | $$$ | $$$$ or empty" },
+              vibe: { type: "STRING", description: "One short phrase capturing the room, e.g. 'Candle-lit, intimate, second-date energy'" },
+              signature_dishes: { type: "ARRAY", items: { type: "STRING" }, description: "3-6 must-order dishes if mentioned" },
+              dietary_tags: { type: "ARRAY", items: { type: "STRING" }, description: "e.g. Vegan, Vegetarian Options, Gluten-Free Friendly" },
+              best_for: { type: "ARRAY", items: { type: "STRING" }, description: "e.g. Date Night, Group Dinner, Quick Lunch, Coffee Meeting" },
+              phone: { type: "STRING" },
+              hours_summary: { type: "STRING", description: "Plain-English hours if known" },
+              google_maps_url: { type: "STRING" },
+              website: { type: "STRING" },
+              wolt_url: { type: "STRING" },
+              instagram_url: { type: "STRING" },
+              // RECIPE fields
+              course: { type: "STRING", description: "Appetizer | Main | Side | Dessert | Breakfast | Drink | Sauce | Snack" },
+              prep_time_minutes: { type: "NUMBER" },
+              cook_time_minutes: { type: "NUMBER" },
+              total_time_minutes: { type: "NUMBER" },
+              serving_size: { type: "STRING", description: "e.g. '4 people'" },
+              difficulty: { type: "STRING", description: "Easy | Medium | Hard" },
+              key_techniques: { type: "ARRAY", items: { type: "STRING" }, description: "e.g. Braising, Sous-Vide" },
+              ingredients: { type: "ARRAY", items: { type: "STRING" } },
+              tips: { type: "ARRAY", items: { type: "STRING" }, description: "Short actionable tips" },
+              // GEAR fields
+              brand: { type: "STRING" },
+              category: { type: "STRING", description: "e.g. Chef Knife, Stand Mixer, Cookbook" },
+              price: { type: "STRING", description: "Price as written, e.g. '$249'" },
+              use_case: { type: "STRING", description: "What it's for in one line" },
+              pros: { type: "ARRAY", items: { type: "STRING" }, description: "3 short pros" },
+              cons: { type: "ARRAY", items: { type: "STRING" } },
+              purchase_link: { type: "STRING" },
+            },
+          },
         },
-        required: ["type", "title", "context_tags", "specific_data"],
+        required: ["type", "title", "description", "context_tags", "specific_data"],
       };
 
-      const systemInstruction = `You are an expert culinary data extractor. Use the user input and any provided metadata to generate structured JSON for a Culinary Logic Repository database.
-If details like prep time, address, or difficulty aren't explicitly mentioned or deducible, leave them as null or defaults, but do not hallucinate facts.
-Always output pure valid JSON matching the schema.`;
+      const systemInstruction = `You are a sharp, well-traveled culinary curator and data extractor. Extract structured info from the user's input.
+
+Rules:
+- description: 1-2 punchy sentences a friend would say. Concrete details over adjectives. "Great food and atmosphere" is FORBIDDEN.
+- context_tags: 6-10 specific Title-Case tags mixing vibe, cuisine, occasion, dietary, price, technique. No duplicates with cuisine/vibe fields.
+- Never invent facts — if a field is unknown use empty string, empty array, or 0.
+- PLACE: fill cuisine, price_range, vibe, signature_dishes, dietary_tags, best_for from whatever context is available.
+- RECIPE: fill course, total_time_minutes, difficulty, dietary_tags, key_techniques, ingredients, tips.
+- GEAR: fill category, use_case, pros, cons.
+- lat/lng are always 0 — backend geocodes them.`;
 
       const contents = [
         { role: 'user', parts: [{ text: "https://www.seriouseats.com/reverse-sear-steak-recipe" }] },
-        { 
-          role: 'model', 
+        {
+          role: 'model',
           parts: [{ text: JSON.stringify({
             type: "RECIPE",
             title: "Reverse-Seared Steak",
+            description: "Start low in the oven, finish with a screaming-hot sear — gets you edge-to-edge medium-rare with a crust that shatters. Worth every extra minute.",
             thumbnail_url: "",
             original_url: "https://www.seriouseats.com/reverse-sear-steak-recipe",
-            context_tags: ["Steak", "Dinner", "Technique"],
+            context_tags: ["Steak", "Dinner Party", "Weeknight Win", "Beef", "Grilling", "Technique-Forward"],
             specific_data: {
+              course: "Main",
               prep_time_minutes: 5,
-              cook_time_minutes: 45,
+              cook_time_minutes: 55,
+              total_time_minutes: 60,
+              serving_size: "2 people",
               difficulty: "Medium",
-              ingredients: ["Steak", "Salt", "Pepper", "Butter"]
+              dietary_tags: ["Gluten-Free", "Dairy-Free"],
+              key_techniques: ["Reverse Sear", "Resting"],
+              ingredients: ["Thick-cut ribeye or strip steak", "Kosher salt", "Black pepper", "Neutral oil", "Butter", "Thyme", "Garlic"],
+              tips: ["Season 24h ahead for best crust", "Use a wire rack so air circulates", "Let it rest 5 min before cutting"]
             }
-          })}] 
+          })}]
         },
-        { role: 'user', parts: [{ text: "Pastis in the meatpacking district. Great vibes, terrible wait times." }] },
+        { role: 'user', parts: [{ text: "Pastis in the meatpacking district. Great vibes, classic French brasserie, always packed on weekends." }] },
         {
           role: 'model',
           parts: [{ text: JSON.stringify({
             type: "PLACE",
             title: "Pastis",
+            description: "A faithful recreation of a Paris brasserie — zinc bar, tiled floors, and steak frites that actually taste like the real thing. Go on a Tuesday; weekends are chaos.",
             thumbnail_url: "",
             original_url: "",
-            context_tags: ["Meatpacking", "Vibes", "Busy", "French"],
+            context_tags: ["French Brasserie", "Date Night", "Classic NYC", "Lively", "Cocktails", "Brunch"],
             specific_data: {
-              location: {
-                address: "Meatpacking District, New York",
-                lat: 0,
-                lng: 0
-              }
+              location: { address: "52 Gansevoort St, New York, NY", lat: 0, lng: 0 },
+              cuisine: "French Brasserie",
+              price_range: "$$$",
+              vibe: "Buzzy Paris brasserie with zinc bar and perpetual energy",
+              signature_dishes: ["Steak Frites", "Moules Marinières", "Croque Monsieur"],
+              dietary_tags: ["Vegetarian Options"],
+              best_for: ["Date Night", "Group Dinner", "Brunch"],
+              phone: "",
+              hours_summary: "",
+              google_maps_url: "",
+              website: "",
+              wolt_url: "",
+              instagram_url: ""
             }
           })}]
         },
@@ -164,12 +218,10 @@ Always output pure valid JSON matching the schema.`;
         }
       });
 
-
       let dataText;
       try {
         dataText = response.text;
       } catch (e) {
-        // sometimes getting .text throws if finishReason is SAFETY, etc.
         console.error("Error accessing response.text:", e);
       }
 
@@ -182,7 +234,6 @@ Always output pure valid JSON matching the schema.`;
         throw new Error("Could not parse data from AI. The model returned no text.");
       }
 
-      // Strip potential markdown code blocks if the model didn't listen
       dataText = dataText.replace(/```(?:json)?/g, '').trim();
 
       let extractedData;
@@ -204,7 +255,6 @@ Always output pure valid JSON matching the schema.`;
       };
 
       if (supabase) {
-        // Assume user is authenticated
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
             throw new Error('Must be logged in to save via Supabase.');
@@ -224,7 +274,6 @@ Always output pure valid JSON matching the schema.`;
           onItemAdded(insertedData as CulinaryItem);
         }
       } else {
-        // Mock DB Mode
         const mockItem: CulinaryItem = {
           id: Math.random().toString(36).substr(2, 9),
           created_at: new Date().toISOString(),
@@ -312,3 +361,4 @@ Always output pure valid JSON matching the schema.`;
     </div>
   );
 }
+
