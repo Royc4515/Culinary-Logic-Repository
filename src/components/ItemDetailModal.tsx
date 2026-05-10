@@ -62,10 +62,44 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
   };
 
   const renderContent = () => {
+    const sd = item.specific_data as any;
+    
     if (item.type === 'PLACE') {
-      const loc = item.specific_data.location;
+      const loc = sd.location;
       return (
         <div className="space-y-6">
+          {/* Description */}
+          {sd.description && (
+            <p className="text-stone-700 text-sm leading-relaxed mb-4">{sd.description}</p>
+          )}
+
+          {/* Photo gallery */}
+          {Array.isArray(sd.photos) && sd.photos.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 mb-4">
+              {sd.photos.map((url: string, i: number) => (
+                <img
+                  key={i}
+                  src={url}
+                  alt=""
+                  className="h-32 w-48 object-cover rounded-xl flex-shrink-0 shadow-sm"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Quick facts row */}
+          <div className="flex flex-wrap gap-3 text-xs text-stone-600 mb-4">
+            {sd.cuisine && (<span className="px-2 py-1 bg-stone-100 rounded-full">{sd.cuisine}</span>)}
+            {sd.price_range && (<span className="px-2 py-1 bg-stone-100 rounded-full">{sd.price_range}</span>)}
+            {sd.vibe && (<span className="px-2 py-1 bg-stone-100 rounded-full italic">{sd.vibe}</span>)}
+            {typeof sd.rating === 'number' && (
+              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">
+                ★ {sd.rating}{sd.ratings_count ? ` (${sd.ratings_count})` : ''}
+              </span>
+            )}
+          </div>
+
           {loc && (
             <div className="h-64 rounded-2xl overflow-hidden border border-stone-200">
               {hasValidKey ? (
@@ -94,12 +128,44 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
             <h4 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">Location Details</h4>
             {loc && <p className="text-stone-700 text-sm mb-4">{loc.address}</p>}
             
+            {/* Hours + phone */}
+            {sd.hours_summary && (
+              <p className="text-xs text-stone-500 mb-1"><strong>Hours:</strong> {sd.hours_summary}</p>
+            )}
+            {sd.phone && (
+              <p className="text-xs text-stone-500 mb-3">
+                <strong>Phone:</strong> <a href={`tel:${sd.phone}`} className="text-stone-700 hover:underline">{sd.phone}</a>
+              </p>
+            )}
+
+            {/* Signature dishes */}
+            {Array.isArray(sd.signature_dishes) && sd.signature_dishes.length > 0 && (
+              <div className="mt-4 mb-6">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2">Must order</h4>
+                <ul className="text-sm text-stone-700 space-y-1">
+                  {sd.signature_dishes.map((d: string, i: number) => <li key={i}>· {d}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {/* Best for / dietary chips */}
+            {(sd.best_for?.length || sd.dietary_tags?.length) > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-6">
+                {sd.best_for?.map((t: string, i: number) => (
+                  <span key={`b${i}`} className="text-[10px] uppercase tracking-widest bg-stone-800 text-white px-2 py-0.5 rounded-full">{t}</span>
+                ))}
+                {sd.dietary_tags?.map((t: string, i: number) => (
+                  <span key={`d${i}`} className="text-[10px] uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">{t}</span>
+                ))}
+              </div>
+            )}
+            
             <div className="flex flex-wrap gap-3">
               {item.original_url && (
                 <button onClick={() => window.open(item.original_url, '_blank')} className="px-4 py-2 bg-stone-800 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-stone-700">Open Resource</button>
               )}
-               {item.specific_data.website && (
-                 <button onClick={() => window.open(item.specific_data.website, '_blank')} className="px-4 py-2 bg-stone-100 text-stone-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-stone-200">Website</button>
+               {sd.website && (
+                 <button onClick={() => window.open(sd.website, '_blank')} className="px-4 py-2 bg-stone-100 text-stone-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-stone-200">Website</button>
                )}
             </div>
           </div>
@@ -110,17 +176,49 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
     if (item.type === 'RECIPE') {
       return (
         <div className="space-y-8">
+           {/* Description */}
+           {sd.description && (
+             <p className="text-stone-700 text-sm leading-relaxed">{sd.description}</p>
+           )}
+
+           {/* Photo gallery */}
+           {Array.isArray(sd.photos) && sd.photos.length > 0 && (
+             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+               {sd.photos.map((url: string, i: number) => (
+                 <img
+                   key={i}
+                   src={url}
+                   alt=""
+                   className="h-32 w-48 object-cover rounded-xl flex-shrink-0 shadow-sm"
+                   loading="lazy"
+                 />
+               ))}
+             </div>
+           )}
+
            <div className="flex flex-wrap gap-8 py-4 border-y border-stone-100 text-sm">
-              {!!item.specific_data.prep_time_minutes && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Prep Time</span> {item.specific_data.prep_time_minutes} min</div>}
-              {!!item.specific_data.cook_time_minutes && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Cook Time</span> {item.specific_data.cook_time_minutes} min</div>}
-              {item.specific_data.difficulty && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Difficulty</span> {item.specific_data.difficulty}</div>}
+              {!!sd.prep_time_minutes && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Prep Time</span> {sd.prep_time_minutes} min</div>}
+              {!!sd.cook_time_minutes && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Cook Time</span> {sd.cook_time_minutes} min</div>}
+              {!!sd.total_time_minutes && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Total Time</span> {sd.total_time_minutes} min</div>}
+              {sd.difficulty && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Difficulty</span> {sd.difficulty}</div>}
+              {sd.cuisine && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Cuisine</span> {sd.cuisine}</div>}
+              {sd.course && <div><span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Course</span> {sd.course}</div>}
            </div>
 
-           {item.specific_data.ingredients && item.specific_data.ingredients.length > 0 && (
+           {/* Dietary tags */}
+           {Array.isArray(sd.dietary_tags) && sd.dietary_tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {sd.dietary_tags.map((t: string, i: number) => (
+                  <span key={i} className="text-[10px] uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">{t}</span>
+                ))}
+              </div>
+           )}
+
+           {sd.ingredients && sd.ingredients.length > 0 && (
              <div>
                <h4 className="text-xl font-serif text-stone-800 mb-4">Ingredients</h4>
                <ul className="space-y-3">
-                 {item.specific_data.ingredients.map((ing: string, i: number) => (
+                 {sd.ingredients.map((ing: string, i: number) => (
                    <li key={i} className="flex gap-4 items-start text-stone-700">
                      <span className="text-[var(--color-accent)] font-bold mt-1">•</span>
                      <span className="leading-relaxed">{ing}</span>
@@ -128,6 +226,33 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
                  ))}
                </ul>
              </div>
+           )}
+
+           {/* Key techniques */}
+           {Array.isArray(sd.key_techniques) && sd.key_techniques.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3">Key Techniques</h4>
+                <div className="flex flex-wrap gap-2">
+                  {sd.key_techniques.map((t: string, i: number) => (
+                    <span key={i} className="px-3 py-1 bg-stone-100 text-stone-700 rounded-lg text-xs">{t}</span>
+                  ))}
+                </div>
+              </div>
+           )}
+
+           {/* Tips */}
+           {Array.isArray(sd.tips) && sd.tips.length > 0 && (
+              <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-3">Kitchen Tips</h4>
+                <ul className="space-y-2">
+                  {sd.tips.map((tip: string, i: number) => (
+                    <li key={i} className="text-sm text-amber-900 leading-relaxed flex gap-2">
+                      <span className="shrink-0 text-amber-500 font-bold italic">tip:</span>
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              </div>
            )}
 
            {item.original_url && (
@@ -140,21 +265,73 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
     if (item.type === 'GEAR') {
       return (
         <div className="space-y-6">
+           {/* Description */}
+           {sd.description && (
+             <p className="text-stone-700 text-sm leading-relaxed mb-4">{sd.description}</p>
+           )}
+
+           {/* Photo gallery */}
+           {Array.isArray(sd.photos) && sd.photos.length > 0 && (
+             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+               {sd.photos.map((url: string, i: number) => (
+                 <img
+                   key={i}
+                   src={url}
+                   alt=""
+                   className="h-32 w-48 object-cover rounded-xl flex-shrink-0 shadow-sm"
+                   loading="lazy"
+                 />
+               ))}
+             </div>
+           )}
+
            <div className="p-6 bg-stone-50 rounded-2xl border border-stone-100">
              <div className="grid grid-cols-2 gap-6">
                <div>
                  <span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Brand</span>
-                 <p className="text-stone-800 font-bold">{item.specific_data.brand || 'Unknown'}</p>
+                 <p className="text-stone-800 font-bold">{sd.brand || 'Unknown'}</p>
                </div>
                <div>
                  <span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Price Info</span>
-                 <p className="text-stone-800 font-bold">{item.specific_data.price || 'N/A'}</p>
+                 <p className="text-stone-800 font-bold">{sd.price || 'N/A'}</p>
                </div>
+               {sd.category && (
+                 <div>
+                   <span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Category</span>
+                   <p className="text-stone-800 font-bold">{sd.category}</p>
+                 </div>
+               )}
+               {sd.use_case && (
+                 <div>
+                   <span className="text-stone-400 font-bold uppercase tracking-widest text-[10px] block mb-1">Use Case</span>
+                   <p className="text-stone-800 font-bold">{sd.use_case}</p>
+                 </div>
+               )}
              </div>
            </div>
 
-           {(item.specific_data.purchase_link || item.original_url) && (
-              <button onClick={() => window.open(item.specific_data.purchase_link || item.original_url, '_blank')} className="w-full py-4 bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-stone-700 transition-colors shadow-lg">Purchase / View Specs</button>
+           {/* Pros & Cons */}
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Array.isArray(sd.pros) && sd.pros.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-3">Pros</h4>
+                  <ul className="text-sm text-stone-700 space-y-2">
+                    {sd.pros.map((p: string, i: number) => <li key={i} className="flex gap-2"><span>+</span> {p}</li>)}
+                  </ul>
+                </div>
+              )}
+              {Array.isArray(sd.cons) && sd.cons.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-red-400 mb-3">Cons</h4>
+                  <ul className="text-sm text-stone-700 space-y-2">
+                    {sd.cons.map((c: string, i: number) => <li key={i} className="flex gap-2"><span>-</span> {c}</li>)}
+                  </ul>
+                </div>
+              )}
+           </div>
+
+           {(sd.purchase_link || item.original_url) && (
+              <button onClick={() => window.open(sd.purchase_link || item.original_url, '_blank')} className="w-full py-4 bg-stone-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-stone-700 transition-colors shadow-lg">Purchase / View Specs</button>
            )}
         </div>
       );
@@ -171,7 +348,7 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
         
         {/* Left pane: Image + Overview */}
         <div className="h-64 md:h-auto md:w-5/12 bg-stone-800 relative shrink-0">
-          <img src={item.thumbnail_url} alt={item.title} className="w-full h-full object-cover opacity-80" />
+          <img src={(item.specific_data as any)?.photos?.[0] || item.thumbnail_url} alt={item.title} className="w-full h-full object-cover opacity-80" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           
           <button 

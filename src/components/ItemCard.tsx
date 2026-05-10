@@ -63,7 +63,7 @@ export default function ItemCard({ item, className = '', featured = false, onTog
       {/* Media Zone */}
       <div className={`relative shrink-0 overflow-hidden bg-stone-800 ${featured ? 'h-64 sm:h-80 md:h-96' : 'h-48 sm:h-56'}`}>
         <img 
-          src={item.thumbnail_url} 
+          src={(item.specific_data as any)?.photos?.[0] || item.thumbnail_url} 
           alt={item.title} 
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-80"
         />
@@ -132,6 +132,23 @@ export default function ItemCard({ item, className = '', featured = false, onTog
             <h3 className="font-serif font-bold text-xl leading-tight text-[var(--color-primary-text)]">
               {item.title}
             </h3>
+            {item.specific_data?.description && (
+              <p className="text-stone-500 text-xs leading-relaxed mt-1 line-clamp-2">
+                {item.specific_data.description}
+              </p>
+            )}
+            {item.type === 'PLACE' && (item.specific_data as any)?.rating && (
+              <div className="flex items-center gap-1 mt-2 text-[10px] font-bold uppercase tracking-widest text-amber-600">
+                <span>★</span>
+                <span>{(item.specific_data as any).rating}</span>
+                {(item.specific_data as any).ratings_count && (
+                  <span className="text-stone-400">({(item.specific_data as any).ratings_count})</span>
+                )}
+                {(item.specific_data as any).price_range && (
+                  <span className="ml-2 text-stone-400">· {(item.specific_data as any).price_range}</span>
+                )}
+              </div>
+            )}
             {item.rating && (
               <div className="flex items-center gap-1 text-[var(--color-accent)] text-xs font-bold tracking-widest mt-1">
                 {'★'.repeat(item.rating)}

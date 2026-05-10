@@ -7,6 +7,54 @@ export interface Location {
   lng: number;
 }
 
+export interface PlaceData {
+  location: { address: string; lat: number; lng: number };
+  cuisine?: string;
+  price_range?: string;
+  vibe?: string;
+  signature_dishes?: string[];
+  dietary_tags?: string[];
+  best_for?: string[];
+  phone?: string;
+  hours_summary?: string;
+  rating?: number;
+  ratings_count?: number;
+  google_maps_url?: string;
+  website?: string;
+  wolt_url?: string;
+  instagram_url?: string;
+  description?: string;
+  photos?: string[];
+}
+
+export interface RecipeData {
+  prep_time_minutes: number;
+  cook_time_minutes: number;
+  total_time_minutes?: number;
+  serving_size: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  ingredients: string[];
+  cuisine?: string;
+  course?: string;
+  dietary_tags?: string[];
+  key_techniques?: string[];
+  tips?: string[];
+  description?: string;
+  photos?: string[];
+}
+
+export interface GearData {
+  brand: string;
+  price: string;
+  purchase_link: string;
+  category?: string;
+  use_case?: string;
+  pros?: string[];
+  cons?: string[];
+  description?: string;
+  photos?: string[];
+}
+
 export interface CulinaryItem {
   id: string;
   type: ItemType;
@@ -17,7 +65,7 @@ export interface CulinaryItem {
   rating?: number;
   personal_review?: string;
   original_url?: string;
-  specific_data: any;
+  specific_data: PlaceData | RecipeData | GearData | any;
 }
 
 export const mockItems: CulinaryItem[] = [
