@@ -90,8 +90,25 @@ def extract_url(text):
     urls = re.findall(r'(https?://[^\s]+)', text)
     return urls[0] if urls else None
 
-
 PLACEHOLDER_IMG = "https://via.placeholder.com/400?text=No+Thumbnail"
+
+def get_fallback_image(title, tags, item_type):
+    keywords = []
+    if title and title != "Untitled Item":
+        clean_title = re.sub(r'[^a-zA-Z0-9\s]', '', title).strip()
+        if clean_title:
+            keywords.append(clean_title)
+    if tags:
+        keywords.extend([re.sub(r'[^a-zA-Z0-9\s]', '', t).strip() for t in tags[:2]])
+    
+    query = ",".join([k for k in keywords if k])
+    if not query:
+        query = "restaurant" if item_type == "PLACE" else "food,cooking" if item_type == "RECIPE" else "kitchen,gear"
+
+    fallback_url = f"https://source.unsplash.com/1600x900/?{urllib.parse.quote(query)}"
+    print(f"[fallback] Using Unsplash fallback image for query '{query}': {fallback_url}")
+    return fallback_url
+
 
 
 def _scrape_with_beautifulsoup(url):
@@ -609,7 +626,15 @@ def telegram_webhook():
     if photos:
         specific_data["photos"] = photos[:8]
 
-    thumbnail_url = (photos[0] if photos else scraped.get("thumbnail_url")) or PLACEHOLDER_IMG
+    # Evaluate thumbnail_url: Use photos[0] (which may be from Places API) or scraped valid image
+    base_thumbnail = photos[0] if photos else scraped.get("thumbnail_url")
+    if not base_thumbnail or base_thumbnail == PLACEHOLDER_IMG or "Extraction+Failed" in base_thumbnail or "Text+Only" in base_thumbnail:
+        thumbnail_url = get_fallback_image(extracted_data.get("title"), extracted_data.get("context_tags", []), item_type)
+        if thumbnail_url and thumbnail_url not in photos:
+            photos.insert(0, thumbnail_url)
+            specific_data["photos"] = photos[:8]
+    else:
+        thumbnail_url = base_thumbnail
 
     payload = {
         "type": item_type,
@@ -623,6 +648,10 @@ def telegram_webhook():
     description = (extracted_data.get("description") or "").strip()
     if description:
         specific_data["description"] = description
+    
+    short_description = (extracted_data.get("short_description") or "").strip()
+    if short_description:
+        specific_data["short_description"] = short_description
 
     try:
         if supabase:

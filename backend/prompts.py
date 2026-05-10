@@ -17,6 +17,7 @@ Output:
   "type": "PLACE",
   "title": "Misi",
   "description": "Lisson-style Italian precision in a minimalist concrete room. The mafaldine with pink peppercorns is a non-negotiable order.",
+  "short_description": "Lisson-style Italian precision in a minimalist concrete room.",
   "context_tags": ["Modern Italian", "Pasta", "Williamsburg", "Buzzy", "Hard To Get", "Minimalist"],
   "specific_data": {
     "location": { "address": "329 Kent Ave, Brooklyn, NY", "lat": 0, "lng": 0 },
@@ -25,7 +26,8 @@ Output:
     "vibe": "Minimalist, loud, and industrial with high-energy kitchen views",
     "signature_dishes": ["Mafaldine with Pink Peppercorns", "Spinach and Mascarpone Tortelli"],
     "best_for": ["Special Occasion", "Group Dinner", "Hard-to-get Rez"],
-    "dietary_tags": ["Vegetarian Options"]
+    "dietary_tags": ["Vegetarian Options"],
+    "opening_hours": "Daily 6pm–midnight; closed Mondays"
   }
 }
 
@@ -36,6 +38,7 @@ Output:
   "type": "RECIPE",
   "title": "Shallot Pasta (The Stew)",
   "description": "A pantry-staple powerhouse that turns a mountain of shallots and a tin of anchovies into a deeply jammy, savory sauce.",
+  "short_description": "A deeply jammy, savory pasta sauce made with a mountain of shallots and anchovies.",
   "context_tags": ["Pasta", "Shallots", "Pantry Meal", "Jammy", "Comfort Food", "Alison Roman"],
   "specific_data": {
     "course": "Main",
@@ -55,6 +58,7 @@ Output:
   "type": "GEAR",
   "title": "Hario V60 Coffee Dripper",
   "description": "The quintessential tool for manual pour-over coffee. Simple, elegant, and provides total control over extraction.",
+  "short_description": "The quintessential tool for manual pour-over coffee extraction.",
   "context_tags": ["Coffee", "Pour Over", "Plastic", "Manual Brew", "Home Barista"],
   "specific_data": {
     "brand": "Hario",
@@ -73,6 +77,7 @@ Output:
   "type": "PLACE" | "RECIPE" | "GEAR",
   "title": "Canonical name (restaurant, recipe, product). Cleaned, no emojis.",
   "description": "1–2 punchy sentences a friend would say to convince you to try it. Concrete details over adjectives.",
+  "short_description": "A premium, magazine-style short description of the place, recipe, or gear based on the context. Max 15 words.",
   "context_tags": ["6–10", "specific", "useful", "tags"],
   "specific_data": {{ ... }}    // see rules below
 }}
@@ -102,6 +107,7 @@ Output:
   "best_for": ["Date Night", "Group Dinner", "Quick Lunch", "Coffee Meeting", ...],
   "phone": "Phone number if known, else ''",
   "hours_summary": "Plain-English hours summary if known (e.g. 'Daily 6pm–midnight; closed Mondays')",
+  "opening_hours": "Extracted operating hours if mentioned, else null",
   "google_maps_url": "",
   "website": "",
   "wolt_url": "",

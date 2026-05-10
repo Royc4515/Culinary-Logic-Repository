@@ -31,6 +31,8 @@ export default function AddManualItemModal({ isOpen, onClose, onItemAdded }: Add
   const [price, setPrice] = useState('');
   const [purchaseLink, setPurchaseLink] = useState('');
 
+  const [photosStr, setPhotosStr] = useState('');
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,6 +53,11 @@ export default function AddManualItemModal({ isOpen, onClose, onItemAdded }: Add
     const specificData: any = {
       description: description
     };
+    
+    if (photosStr.trim()) {
+      specificData.photos = photosStr.split(',').map(u => u.trim()).filter(u => u.length > 0);
+    }
+
     if (type === 'PLACE') {
       specificData.location = { address, lat: 0, lng: 0 };
     } else if (type === 'RECIPE') {
@@ -195,6 +202,17 @@ export default function AddManualItemModal({ isOpen, onClose, onItemAdded }: Add
                 onChange={e => setThumbnailUrl(e.target.value)}
                 placeholder="https://..."
                 className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-stone-500 uppercase tracking-widest mb-1.5">Gallery Photos (Comma separated URLs)</label>
+              <textarea 
+                value={photosStr}
+                onChange={e => setPhotosStr(e.target.value)}
+                placeholder="https://image1.jpg, https://image2.jpg"
+                rows={2}
+                className="w-full px-3 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] resize-none"
               />
             </div>
 
