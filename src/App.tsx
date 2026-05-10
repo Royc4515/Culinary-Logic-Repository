@@ -237,8 +237,9 @@ export default function App() {
 
   const handleAdminLogin = async () => {
     if (!supabase) return;
-    let redirectUrl = window.location.origin + '/';
-    if (window.location.origin.includes('localhost')) {
+    const appUrl = import.meta.env.VITE_APP_URL;
+    let redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
+    if (!appUrl && window.location.origin.includes('localhost')) {
       redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
     }
     const { data, error } = await supabase.auth.signInWithOAuth({
