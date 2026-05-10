@@ -28,13 +28,31 @@ export default function App() {
       return;
     }
 
-    // Standard OAuth flow: Supabase auto-detects #access_token in the URL on
-    // load, creates the session, and fires onAuthStateChange. No popup, no
-    // cross-window messaging — same-window redirect handles everything.
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const init = async () => {
+      // Manual hash recovery: Supabase's detectSessionInUrl is unreliable in
+      // some build/runtime configurations, so we explicitly parse the OAuth
+      // tokens out of window.location.hash and feed them to setSession.
+      const hash = window.location.hash;
+      if (hash.includes('access_token=')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+        if (access_token && refresh_token) {
+          const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (!error && data.session) {
+            setSession(data.session);
+            window.history.replaceState(null, '', window.location.pathname);
+            setIsInitializingAuth(false);
+            return;
+          }
+        }
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setIsInitializingAuth(false);
-    });
+    };
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
