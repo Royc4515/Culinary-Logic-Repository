@@ -363,6 +363,16 @@ def telegram_webhook():
         send_message(chat_id, "⚠️ Send me a URL or a text note.")
         return jsonify({"status": "ignored"}), 200
 
+    # Require a linked account: items are now per-user, so an unlinked chat
+    # has nowhere to save the item.
+    if not user_id:
+        send_message(
+            chat_id,
+            "🔗 This chat isn't linked to an account yet.\n\n"
+            "Open the web app, sign in, and click 'Connect Telegram' to start saving items."
+        )
+        return jsonify({"status": "not_linked"}), 200
+
     progress_id = send_message(chat_id, "🔍 Processing your culinary intel...")
 
     def progress(t):
@@ -427,9 +437,8 @@ def telegram_webhook():
         "context_tags": extracted_data.get("context_tags", []),
         "original_url": url or "",
         "specific_data": specific_data,
+        "user_id": user_id,
     }
-    if user_id:
-        payload["user_id"] = user_id
 
     try:
         if supabase:
@@ -450,10 +459,6 @@ def telegram_webhook():
         and payload["specific_data"]["location"].get("lat", 0) != 0
     )
     progress(f"✅ Saved: {title} ({item_type}){' 📍' if has_pin else ''}")
-
-    if not user_id:
-        send_message(chat_id, "💡 Tip: open the web app and click 'Connect Telegram' to tag items as yours and unlock /list and /undo.")
-
     return jsonify({"status": "success", "data": payload}), 200
 
 
