@@ -28,30 +28,13 @@ export default function App() {
       return;
     }
 
-    // 1. If we are the popup, we receive the token in the URL hash.
-    // Send it to the parent window and close ourselves.
-    if (window.opener && window.name === 'oauth_popup') {
-      if (window.location.hash && window.location.hash.includes('access_token=')) {
-        window.opener.postMessage({ type: 'SUPABASE_AUTH_HASH', hash: window.location.hash }, '*');
-        window.close();
-      }
-    }
-
-    // 2. If we are the parent window, listen for the message from the popup.
+    // Listen for the session message from the OAuth popup.
     const handleMessage = async (e: MessageEvent) => {
-      if (e.data?.type === 'SUPABASE_AUTH_HASH') {
-        const hash = e.data.hash;
-        const params = new URLSearchParams(hash.replace('#', '?'));
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        if (accessToken && refreshToken) {
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken
-          });
-          if (data.session) {
-            setSession(data.session);
-          }
+      if (e.data?.type === 'SUPABASE_AUTH_SESSION') {
+        const { access_token, refresh_token } = e.data;
+        if (access_token && refresh_token) {
+          const { data } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (data.session) setSession(data.session);
         }
       }
     };
@@ -60,17 +43,20 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsInitializingAuth(false);
-      if (session && window.opener && window.name === 'oauth_popup') {
-        window.close(); // fallback close
-      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      // If this is the popup window, relay the session to the parent and close.
       if (session && window.opener && window.name === 'oauth_popup') {
-        window.close(); // fallback close
+        window.opener.postMessage({
+          type: 'SUPABASE_AUTH_SESSION',
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }, '*');
+        window.close();
       }
     });
 
