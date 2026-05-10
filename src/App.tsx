@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles, Lock } from 'lucide-react';
+import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles, Lock, Send } from 'lucide-react';
 import { mockItems, CulinaryItem } from './data/mockData';
 import ItemCard from './components/ItemCard';
 import EmptyState from './components/EmptyState';
@@ -7,6 +7,7 @@ import AddManualItemModal from './components/AddManualItemModal';
 import AddSmartItemModal from './components/AddSmartItemModal';
 import MapView from './components/MapView';
 import AuthScreen from './components/AuthScreen';
+import TelegramLinkModal from './components/TelegramLinkModal';
 import { supabase } from './lib/supabase';
 
 type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
@@ -20,6 +21,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
+  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isInitializingAuth, setIsInitializingAuth] = useState(true);
 
   useEffect(() => {
@@ -304,6 +306,14 @@ export default function App() {
                   >
                     <Plus className="w-4 h-4" />
                   </button>
+                  <button
+                    onClick={() => setIsTelegramModalOpen(true)}
+                    className="h-8 w-8 bg-[#229ED9] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#1a8bbf] transition-colors"
+                    aria-label="Connect Telegram"
+                    title="Connect Telegram"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
                   <button onClick={handleLogout} className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
                     <LogOut className="w-3 h-3" />
                   </button>
@@ -425,6 +435,14 @@ export default function App() {
                 >
                   <Plus className="w-4 h-4" />
                 </button>
+                <button
+                  onClick={() => setIsTelegramModalOpen(true)}
+                  className="flex items-center gap-2 px-4 h-10 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[#1a8bbf] transition-all shrink-0"
+                  title="Connect Telegram"
+                >
+                  <Send className="w-4 h-4" />
+                  Telegram
+                </button>
                 <button onClick={handleLogout} className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-stone-700 transition">
                   <LogOut className="w-4 h-4" />
                 </button>
@@ -496,6 +514,12 @@ export default function App() {
         isOpen={isSmartModalOpen}
         onClose={() => setIsSmartModalOpen(false)}
         onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
+      />
+      <TelegramLinkModal
+        isOpen={isTelegramModalOpen}
+        onClose={() => setIsTelegramModalOpen(false)}
+        session={session}
+        onLinked={() => {}}
       />
     </div>
   );
