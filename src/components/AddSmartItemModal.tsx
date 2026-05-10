@@ -204,6 +204,27 @@ Rules:
             }
           })}]
         },
+        { role: 'user', parts: [{ text: "The Hario V60 is the gold standard for pour over. Plastic one is actually better for heat retention than ceramic." }] },
+        {
+          role: 'model',
+          parts: [{ text: JSON.stringify({
+            type: "GEAR",
+            title: "Hario V60 Coffee Dripper",
+            description: "The quintessential tool for manual pour-over coffee. Simple, elegant, and provides total control over extraction.",
+            thumbnail_url: "",
+            original_url: "",
+            context_tags: ["Coffee", "Pour Over", "Plastic", "Manual Brew", "Home Barista"],
+            specific_data: {
+              brand: "Hario",
+              category: "Coffee Dripper",
+              price: "$10 - $25",
+              use_case: "Manual drip coffee extraction",
+              pros: ["Excellent temperature stability (plastic)", "Total flow control", "Affordable"],
+              cons: ["Steep learning curve for technique"],
+              purchase_link: ""
+            }
+          })}]
+        },
         { role: 'user', parts: [{ text: enhancedInputData }] }
       ];
 

@@ -8,6 +8,65 @@ Classify the item as exactly one of: "PLACE", "RECIPE", or "GEAR".
 Then fill the schema. Be specific, evocative, and accurate. Never invent facts —
 if a field is unknown, return an empty string, empty array, or 0.
 
+# EXAMPLES
+
+## Example 1: Restaurant/Place
+Input Text: "Misi in Williamsburg. Incredible pasta, specifically the mafaldine with pink peppercorns. Very buzzy vibe, hard to get a rez."
+Output:
+{
+  "type": "PLACE",
+  "title": "Misi",
+  "description": "Lisson-style Italian precision in a minimalist concrete room. The mafaldine with pink peppercorns is a non-negotiable order.",
+  "context_tags": ["Modern Italian", "Pasta", "Williamsburg", "Buzzy", "Hard To Get", "Minimalist"],
+  "specific_data": {
+    "location": { "address": "329 Kent Ave, Brooklyn, NY", "lat": 0, "lng": 0 },
+    "cuisine": "Modern Italian",
+    "price_range": "$$$",
+    "vibe": "Minimalist, loud, and industrial with high-energy kitchen views",
+    "signature_dishes": ["Mafaldine with Pink Peppercorns", "Spinach and Mascarpone Tortelli"],
+    "best_for": ["Special Occasion", "Group Dinner", "Hard-to-get Rez"],
+    "dietary_tags": ["Vegetarian Options"]
+  }
+}
+
+## Example 2: Recipe
+Input Text: "I just made Alison Roman's Shallot Pasta. It takes like 45 mins but use a whole tin of anchovies. So good."
+Output:
+{
+  "type": "RECIPE",
+  "title": "Shallot Pasta (The Stew)",
+  "description": "A pantry-staple powerhouse that turns a mountain of shallots and a tin of anchovies into a deeply jammy, savory sauce.",
+  "context_tags": ["Pasta", "Shallots", "Pantry Meal", "Jammy", "Comfort Food", "Alison Roman"],
+  "specific_data": {
+    "course": "Main",
+    "total_time_minutes": 45,
+    "difficulty": "Easy",
+    "dietary_tags": ["Pescatarian"],
+    "key_techniques": ["Caramelizing", "Emulsifying"],
+    "ingredients": ["Shallots", "Anchovies", "Tomato Paste", "Olive Oil", "Pasta", "Chili Flakes"],
+    "tips": ["Caramelize the shallots until dark brown", "Save pasta water for the sauce"]
+  }
+}
+
+## Example 3: Gear
+Input Text: "The Hario V60 is the gold standard for pour over. Plastic one is actually better for heat retention than ceramic."
+Output:
+{
+  "type": "GEAR",
+  "title": "Hario V60 Coffee Dripper",
+  "description": "The quintessential tool for manual pour-over coffee. Simple, elegant, and provides total control over extraction.",
+  "context_tags": ["Coffee", "Pour Over", "Plastic", "Manual Brew", "Home Barista"],
+  "specific_data": {
+    "brand": "Hario",
+    "category": "Coffee Dripper",
+    "price": "$10 - $25",
+    "use_case": "Manual drip coffee extraction",
+    "pros": ["Excellent temperature stability (plastic)", "Total flow control", "Affordable"],
+    "cons": ["Steep learning curve for technique"],
+    "purchase_link": ""
+  }
+}
+
 # OUTPUT SCHEMA
 
 {{
