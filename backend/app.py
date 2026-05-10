@@ -91,43 +91,184 @@ def extract_url(text):
     return urls[0] if urls else None
 
 
+PLACEHOLDER_IMG = "https://via.placeholder.com/400?text=No+Thumbnail"
+
+
+def _scrape_with_beautifulsoup(url):
+    """Direct fetch + BS4 parse. Returns a rich dict."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                      'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    response = requests.get(url, headers=headers, timeout=8)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    def meta(prop=None, name=None):
+        tag = soup.find('meta', property=prop) if prop else soup.find('meta', attrs={'name': name})
+        return (tag.get('content') or "").strip() if tag else ""
+
+    title = meta(prop='og:title') or (soup.title.string.strip() if soup.title and soup.title.string else "Unknown Title")
+    description = meta(prop='og:description') or meta(name='description')
+    site_name = meta(prop='og:site_name')
+    primary_image = meta(prop='og:image') or meta(name='twitter:image')
+
+    images = []
+    for tag in soup.find_all('meta', property='og:image'):
+        u = (tag.get('content') or "").strip()
+        if u and u not in images:
+            images.append(u)
+    if primary_image and primary_image not in images:
+        images.insert(0, primary_image)
+
+    body_excerpt = ""
+    for selector in ['article', 'main', 'div[itemprop="articleBody"]']:
+        node = soup.select_one(selector)
+        if node:
+            body_excerpt = " ".join(node.get_text(" ", strip=True).split())[:2000]
+            break
+    if not body_excerpt:
+        text = soup.get_text(" ", strip=True)
+        body_excerpt = " ".join(text.split())[:2000]
+
+    return {
+        "thumbnail_url": primary_image or PLACEHOLDER_IMG,
+        "images": images,
+        "title": title,
+        "description": description,
+        "body_excerpt": body_excerpt,
+        "site_name": site_name,
+    }
+
+
 def scrape_metadata(url):
-    """Scrape OpenGraph metadata via Microlink with a BeautifulSoup fallback."""
+    """Scrape page metadata via Microlink (rich) with a BeautifulSoup fallback.
+
+    Returns a dict with keys: thumbnail_url, images[], title, description,
+    body_excerpt, site_name.
+    """
+    # Try Microlink first — handles JS-rendered pages and Instagram/TikTok.
     try:
-        microlink_url = f"https://api.microlink.io?url={urllib.parse.quote(url, safe='')}"
-        response = requests.get(microlink_url, timeout=10)
+        microlink_url = f"https://api.microlink.io?url={urllib.parse.quote(url, safe='')}&audio=false&video=false&meta=true"
+        response = requests.get(microlink_url, timeout=12)
         if response.status_code == 200:
             res_json = response.json()
             if res_json.get('status') == 'success':
                 data = res_json.get('data', {})
-                title = data.get('title', "Unknown Title")
-                description = data.get('description', "")
+                title = data.get('title') or "Unknown Title"
+                description = data.get('description') or ""
+                site_name = data.get('publisher') or data.get('author') or ""
+
                 image_data = data.get('image')
                 thumbnail_url = ""
                 if isinstance(image_data, dict):
                     thumbnail_url = image_data.get('url', "")
                 elif isinstance(image_data, str):
                     thumbnail_url = image_data
-                if not thumbnail_url:
-                    thumbnail_url = "https://via.placeholder.com/400?text=No+Thumbnail"
-                return thumbnail_url, title, description
+                thumbnail_url = thumbnail_url or PLACEHOLDER_IMG
+
+                images = [thumbnail_url] if thumbnail_url and thumbnail_url != PLACEHOLDER_IMG else []
+                logo = data.get('logo')
+                if isinstance(logo, dict) and logo.get('url') and logo['url'] not in images:
+                    images.append(logo['url'])
+
+                return {
+                    "thumbnail_url": thumbnail_url,
+                    "images": images,
+                    "title": title,
+                    "description": description,
+                    "body_excerpt": "",  # Microlink doesn't return body
+                    "site_name": site_name,
+                }
     except Exception as e:
         print(f"Microlink API error for {url}: {e}")
 
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
-        response = requests.get(url, headers=headers, timeout=5)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        og_image = soup.find('meta', property='og:image')
-        og_title = soup.find('meta', property='og:title')
-        og_desc = soup.find('meta', property='og:description')
-        title = og_title.get('content') if og_title else soup.title.string if soup.title else "Unknown Title"
-        description = og_desc.get('content') if og_desc else ""
-        thumbnail_url = og_image.get('content') if og_image else "https://via.placeholder.com/400?text=No+Thumbnail"
-        return thumbnail_url, title, description
+        return _scrape_with_beautifulsoup(url)
     except Exception as e:
         print(f"Fallback scraping error for {url}: {e}")
-        return "https://via.placeholder.com/400?text=Extraction+Failed", "Unknown Title", ""
+        return {
+            "thumbnail_url": "https://via.placeholder.com/400?text=Extraction+Failed",
+            "images": [],
+            "title": "Unknown Title",
+            "description": "",
+            "body_excerpt": "",
+            "site_name": "",
+        }
+
+
+# ---------- Google Places enrichment ----------
+
+PLACES_FIELDS = (
+    "place_id,name,formatted_address,geometry,rating,user_ratings_total,"
+    "price_level,website,formatted_phone_number,international_phone_number,"
+    "opening_hours,types,business_status,url,editorial_summary,photos"
+)
+
+
+def google_places_enrich(query, location_hint=""):
+    """Look up a place via Google Places Text Search → Place Details.
+
+    Returns a dict with rich place data (or {} on failure). Uses MAPS_API_KEY,
+    which must have the Places API enabled.
+    """
+    if not MAPS_API_KEY or not query:
+        return {}
+
+    try:
+        search_q = f"{query} {location_hint}".strip()
+        search_url = (
+            "https://maps.googleapis.com/maps/api/place/textsearch/json"
+            f"?query={urllib.parse.quote(search_q)}&key={MAPS_API_KEY}"
+        )
+        sr = requests.get(search_url, timeout=6).json()
+        if sr.get("status") != "OK" or not sr.get("results"):
+            return {}
+        place_id = sr["results"][0]["place_id"]
+
+        details_url = (
+            "https://maps.googleapis.com/maps/api/place/details/json"
+            f"?place_id={place_id}&fields={PLACES_FIELDS}&key={MAPS_API_KEY}"
+        )
+        dr = requests.get(details_url, timeout=6).json()
+        if dr.get("status") != "OK":
+            return {}
+        result = dr.get("result", {}) or {}
+
+        photo_urls = []
+        for p in (result.get("photos") or [])[:6]:
+            ref = p.get("photo_reference")
+            if ref:
+                photo_urls.append(
+                    "https://maps.googleapis.com/maps/api/place/photo"
+                    f"?maxwidth=1200&photo_reference={ref}&key={MAPS_API_KEY}"
+                )
+
+        loc = (result.get("geometry") or {}).get("location") or {}
+        oh = result.get("opening_hours") or {}
+
+        return {
+            "place_id": result.get("place_id", ""),
+            "name": result.get("name", ""),
+            "address": result.get("formatted_address", ""),
+            "lat": loc.get("lat", 0.0),
+            "lng": loc.get("lng", 0.0),
+            "rating": result.get("rating"),
+            "ratings_count": result.get("user_ratings_total"),
+            "price_level": result.get("price_level"),
+            "website": result.get("website", ""),
+            "phone": result.get("formatted_phone_number", "")
+                     or result.get("international_phone_number", ""),
+            "google_maps_url": result.get("url", ""),
+            "types": result.get("types", []),
+            "business_status": result.get("business_status", ""),
+            "editorial_summary": ((result.get("editorial_summary") or {}).get("overview") or ""),
+            "hours_summary": "; ".join(oh.get("weekday_text", []) or []),
+            "open_now": oh.get("open_now"),
+            "photos": photo_urls,
+        }
+    except Exception as e:
+        print(f"[places] enrich error: {e}")
+        return {}
 
 
 def geocode_address(address):
@@ -379,27 +520,59 @@ def telegram_webhook():
         edit_message(chat_id, progress_id, t)
 
     url = extract_url(text)
-    thumbnail_url, scraped_title, scraped_caption = (
-        "https://via.placeholder.com/400?text=Text+Only", "", ""
-    )
+    scraped = {
+        "thumbnail_url": "https://via.placeholder.com/400?text=Text+Only",
+        "images": [],
+        "title": "",
+        "description": "",
+        "body_excerpt": "",
+        "site_name": "",
+    }
     if url:
         progress("📥 Scraping page metadata...")
-        thumbnail_url, scraped_title, scraped_caption = scrape_metadata(url)
+        scraped = scrape_metadata(url)
 
     if not groq_client:
         progress("❌ AI service not configured.")
         return jsonify({"status": "error", "message": "Missing Groq configuration"}), 500
 
+    # Pre-LLM Places enrichment: if the scraped title or user text looks like
+    # a real place, hit Google Places now so the LLM can ground its description
+    # in the authoritative facts (rating, phone, hours, photos).
+    places_data = {}
+    candidate_query = (scraped.get("title") or "").strip()
+    if not candidate_query and text:
+        candidate_query = text.strip().split("\n")[0][:120]
+    looks_like_place = bool(candidate_query) and (
+        not url
+        or any(host in url for host in ("instagram.com", "tiktok.com", "google.com/maps", "maps.app.goo.gl", "wolt.com"))
+        or (scraped.get("site_name", "") or "").lower() in {"instagram", "tiktok", "google maps"}
+    )
+    if looks_like_place:
+        progress("🌐 Looking up place details on Google...")
+        places_data = google_places_enrich(candidate_query)
+
     progress("🧠 Parsing with AI...")
-    prompt = get_extraction_prompt(text, scraped_title, scraped_caption)
+    prompt = get_extraction_prompt(
+        user_text=text,
+        scraped_title=scraped.get("title", ""),
+        scraped_caption=scraped.get("description", ""),
+        scraped_body=scraped.get("body_excerpt", ""),
+        scraped_site=scraped.get("site_name", ""),
+        places_data=json.dumps(places_data, ensure_ascii=False) if places_data else "",
+    )
 
     chat_completion = None
     for model in MODELS_TO_TRY:
         try:
             chat_completion = groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": "You return only valid JSON objects matching the requested schema. No prose, no Markdown."},
+                    {"role": "user", "content": prompt},
+                ],
                 model=model,
-                temperature=0.1,
+                temperature=0.3,
+                response_format={"type": "json_object"},
             )
             break
         except Exception as e:
@@ -421,14 +594,41 @@ def telegram_webhook():
     item_type = extracted_data.get("type", "PLACE")
     specific_data = extracted_data.get("specific_data", {}) or {}
 
-    if item_type == "PLACE" and "location" in specific_data:
-        raw_address = specific_data["location"].get("address", "")
-        if raw_address:
+    # Merge Google Places ground truth into the PLACE specific_data and prefer
+    # Places photos (they're the high-quality, on-brand ones).
+    photos = []
+    if scraped.get("images"):
+        photos.extend(scraped["images"])
+
+    if item_type == "PLACE":
+        loc = specific_data.setdefault("location", {"address": "", "lat": 0.0, "lng": 0.0})
+        if places_data:
+            if places_data.get("address"):
+                loc["address"] = places_data["address"]
+            loc["lat"] = places_data.get("lat", loc.get("lat", 0.0))
+            loc["lng"] = places_data.get("lng", loc.get("lng", 0.0))
+            specific_data["google_maps_url"] = places_data.get("google_maps_url", "") or specific_data.get("google_maps_url", "")
+            specific_data["website"] = specific_data.get("website") or places_data.get("website", "")
+            specific_data["phone"] = specific_data.get("phone") or places_data.get("phone", "")
+            specific_data["hours_summary"] = specific_data.get("hours_summary") or places_data.get("hours_summary", "")
+            specific_data["rating"] = places_data.get("rating")
+            specific_data["ratings_count"] = places_data.get("ratings_count")
+            if places_data.get("price_level") is not None and not specific_data.get("price_range"):
+                specific_data["price_range"] = "$" * int(places_data["price_level"]) if places_data["price_level"] else ""
+            for p in places_data.get("photos", []):
+                if p not in photos:
+                    photos.insert(0, p)  # Places photos preferred as primary
+        if loc.get("address") and (not loc.get("lat") or loc["lat"] == 0):
             progress("📍 Resolving location on map...")
-            lat, lng, fmt_address = geocode_address(raw_address)
-            specific_data["location"]["lat"] = lat
-            specific_data["location"]["lng"] = lng
-            specific_data["location"]["address"] = fmt_address
+            lat, lng, fmt_address = geocode_address(loc["address"])
+            loc["lat"] = lat
+            loc["lng"] = lng
+            loc["address"] = fmt_address
+
+    if photos:
+        specific_data["photos"] = photos[:8]
+
+    thumbnail_url = (photos[0] if photos else scraped.get("thumbnail_url")) or PLACEHOLDER_IMG
 
     payload = {
         "type": item_type,
@@ -439,6 +639,9 @@ def telegram_webhook():
         "specific_data": specific_data,
         "user_id": user_id,
     }
+    description = (extracted_data.get("description") or "").strip()
+    if description:
+        specific_data["description"] = description
 
     try:
         if supabase:
