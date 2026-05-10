@@ -3,7 +3,8 @@ services:
     name: clr-backend
     plan: free
     runtime: python
-    # In the Render dashboard, set "Root Directory" to "backend".
+    # CRITICAL: In the Render dashboard, you MUST set "Root Directory" to "backend"
+    # or the build will fail to find app.py.
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     envVars:
