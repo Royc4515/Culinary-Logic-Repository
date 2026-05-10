@@ -17,6 +17,11 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
 
   if (!isOpen) return null;
 
+  function extractUrl(text: string): string | null {
+    const urls = text.match(/(https?:\/\/[^\s]+)/);
+    return urls ? urls[0] : null;
+  }
+
   const handleProcess = async () => {
     if (!inputData.trim()) return;
     setIsProcessing(true);
@@ -28,6 +33,24 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
         throw new Error('Gemini API key is required for AI features.');
       }
 
+      let enhancedInputData = inputData;
+      const parsedUrl = extractUrl(inputData);
+      
+      // Attempt to enrich with Microlink if a URL is provided
+      if (parsedUrl) {
+        try {
+          const microlinkUrl = `https://api.microlink.io?url=${encodeURIComponent(parsedUrl)}`;
+          const mlResponse = await fetch(microlinkUrl, { signal: AbortSignal.timeout(5000) });
+          const mlData = await mlResponse.json();
+          if (mlData.status === 'success' && mlData.data) {
+            const imageUrl = typeof mlData.data.image === 'object' && mlData.data.image !== null ? mlData.data.image.url : (mlData.data.image || 'N/A');
+            enhancedInputData = `Original Input: ${inputData}\n\nExtracted Metadata from URL:\nTitle: ${mlData.data.title || 'N/A'}\nDescription: ${mlData.data.description || 'N/A'}\nImage URL: ${imageUrl}`;
+          }
+        } catch (e) {
+          console.warn("Could not fetch metadata for URL", e);
+        }
+      }
+
       const ai = new GoogleGenAI({ apiKey });
       
       const responseSchema = {
@@ -35,6 +58,7 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
         properties: {
           type: {
             type: "STRING",
+            enum: ["PLACE", "RECIPE", "GEAR"],
             description: "Must be 'PLACE', 'RECIPE', or 'GEAR'",
           },
           title: {
@@ -67,7 +91,11 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
               },
               prep_time_minutes: { type: "NUMBER", description: "If a recipe" },
               cook_time_minutes: { type: "NUMBER", description: "If a recipe" },
-              difficulty: { type: "STRING", description: "If a recipe (e.g. Easy, Medium, Hard)" },
+              difficulty: { 
+                type: "STRING", 
+                enum: ["Easy", "Medium", "Hard"],
+                description: "If a recipe (e.g. Easy, Medium, Hard)" 
+              },
               ingredients: { 
                 type: "ARRAY", 
                 items: { type: "STRING" },
@@ -82,21 +110,60 @@ export default function AddSmartItemModal({ isOpen, onClose, onItemAdded }: AddS
         required: ["type", "title", "context_tags", "specific_data"],
       };
 
-      const prompt = `You are a culinary data extractor. Analyze the following user input and extract structured data for a Culinary Logic Repository database. 
-If the user provides a URL (like an Instagram reel or TikTok), guess the context based on URL slugs, or just provide placeholders and ask the user to fill the rest manually.
+      const systemInstruction = `You are an expert culinary data extractor. Use the user input and any provided metadata to generate structured JSON for a Culinary Logic Repository database.
+If details like prep time, address, or difficulty aren't explicitly mentioned or deducible, leave them as null or defaults, but do not hallucinate facts.
+Always output pure valid JSON matching the schema.`;
 
-Make sure to respond with ONLY a valid, raw JSON object. Do not format with markdown blocks. Keep tags short.
-
-Input: "${inputData}"`;
+      const contents = [
+        { role: 'user', parts: [{ text: "https://www.seriouseats.com/reverse-sear-steak-recipe" }] },
+        { 
+          role: 'model', 
+          parts: [{ text: JSON.stringify({
+            type: "RECIPE",
+            title: "Reverse-Seared Steak",
+            thumbnail_url: "",
+            original_url: "https://www.seriouseats.com/reverse-sear-steak-recipe",
+            context_tags: ["Steak", "Dinner", "Technique"],
+            specific_data: {
+              prep_time_minutes: 5,
+              cook_time_minutes: 45,
+              difficulty: "Medium",
+              ingredients: ["Steak", "Salt", "Pepper", "Butter"]
+            }
+          })}] 
+        },
+        { role: 'user', parts: [{ text: "Pastis in the meatpacking district. Great vibes, terrible wait times." }] },
+        {
+          role: 'model',
+          parts: [{ text: JSON.stringify({
+            type: "PLACE",
+            title: "Pastis",
+            thumbnail_url: "",
+            original_url: "",
+            context_tags: ["Meatpacking", "Vibes", "Busy", "French"],
+            specific_data: {
+              location: {
+                address: "Meatpacking District, New York",
+                lat: 0,
+                lng: 0
+              }
+            }
+          })}]
+        },
+        { role: 'user', parts: [{ text: enhancedInputData }] }
+      ];
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: prompt,
+        contents,
         config: {
+          systemInstruction: { parts: [{ text: systemInstruction }] },
           responseMimeType: 'application/json',
           responseSchema: responseSchema as any,
+          temperature: 0.1,
         }
       });
+
 
       let dataText;
       try {

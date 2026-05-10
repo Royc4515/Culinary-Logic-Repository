@@ -11,48 +11,48 @@ Then, extract the relevant properties and return a strict JSON object.
 # SCHEMA REQUIREMENTS
 
 The output must be a valid JSON object matching exactly this structure:
-{{
+{
     "type": "PLACE" | "RECIPE" | "GEAR",
     "title": "Name of the entity (e.g., restaurant name, recipe name, product name)",
     "context_tags": ["Array", "of", "relevant", "tags", "e.g.", "Date Night", "Keto", "High End"],
-    "specific_data": {{
+    "specific_data": {
         // DEPENDS ON THE TYPE. See rules below.
-    }}
-}}
+    }
+}
 
 # specific_data RULES
 
 1. If type is "PLACE":
    - "specific_data" MUST include:
-     {{
-        "location": {{
+     {
+        "location": {
             "address": "Extracted address or location name. Map API will resolve the rest.",
             "lat": 0.0,
             "lng": 0.0
-        }},
+        },
         "google_maps_url": "Extract if present, else empty string",
         "website": "Extract website url if present, else empty string",
         "wolt_url": "Extract wolt url if present, else empty string",
         "instagram_url": "Extract instagram url if present, else empty string"
-     }}
+     }
 
 2. If type is "RECIPE":
    - "specific_data" MUST include:
-     {{
+     {
         "prep_time_minutes": integer (estimate based on recipe if not explicit, use 0 if unknown),
         "cook_time_minutes": integer (estimate based on recipe if not explicit, use 0 if unknown),
         "serving_size": "Extracted serving size (e.g., '4 people', '2 portions') or empty string if unknown",
         "difficulty": "Easy" | "Medium" | "Hard",
         "ingredients": ["list", "of", "extracted", "ingredients"]
-     }}
+     }
 
 3. If type is "GEAR":
    - "specific_data" MUST include:
-     {{
+     {
         "brand": "Extract or guess brand from text",
         "price": "Extracted price (e.g., '$40') or empty string",
         "purchase_link": "Extract URL if distinct from original_url, else empty string"
-     }}
+     }
 
 # CONSTANTS AND RULES
 - The 'type' MUST be exactly one of "PLACE", "RECIPE", or "GEAR".

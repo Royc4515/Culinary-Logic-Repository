@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles, Lock, Send } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Map, Grid, Search, Filter, Plus, LogOut, Sparkles, Send } from 'lucide-react';
 import { mockItems, CulinaryItem } from './data/mockData';
 import ItemCard from './components/ItemCard';
 import EmptyState from './components/EmptyState';
@@ -7,8 +7,8 @@ import AddManualItemModal from './components/AddManualItemModal';
 import AddSmartItemModal from './components/AddSmartItemModal';
 import MapView from './components/MapView';
 import AuthScreen from './components/AuthScreen';
-import TelegramLinkModal from './components/TelegramLinkModal';
 import { supabase } from './lib/supabase';
+import TelegramConnectOverlay from './components/TelegramConnectOverlay';
 
 type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
 
@@ -21,8 +21,90 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSmartModalOpen, setIsSmartModalOpen] = useState(false);
-  const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isInitializingAuth, setIsInitializingAuth] = useState(true);
+
+  // Telegram Link State
+  const [telegramLink, setTelegramLink] = useState<{ id: string, telegram_username: string } | null>(null);
+  const [isLinkingTelegram, setIsLinkingTelegram] = useState(false);
+  const [telegramStatusMsg, setTelegramStatusMsg] = useState<string | null>(null);
+  const [pendingLinkData, setPendingLinkData] = useState<{ token: string; deep_link: string } | null>(null);
+  const telegramLinkRef = useRef(telegramLink);
+
+  useEffect(() => {
+    telegramLinkRef.current = telegramLink;
+  }, [telegramLink]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) return;
+    
+    let intervalId: ReturnType<typeof setInterval>;
+    
+    const fetchLink = async () => {
+      const { data } = await supabase
+        .from('telegram_links')
+        .select('id, telegram_username')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (data) {
+        setTelegramLink(data);
+        setIsLinkingTelegram(false);
+        setTelegramStatusMsg(null);
+        return true;
+      }
+      return false;
+    };
+    fetchLink();
+
+    if (isLinkingTelegram) {
+      let attempts = 0;
+      intervalId = setInterval(async () => {
+        attempts++;
+        const found = await fetchLink();
+        if (found || attempts >= 20) {
+          clearInterval(intervalId);
+          setIsLinkingTelegram(false);
+          if (!found && attempts >= 20) {
+            setTelegramStatusMsg('Link timeout. Try again.');
+            setTimeout(() => setTelegramStatusMsg(null), 3000);
+          }
+        }
+      }, 3000);
+    }
+    
+    return () => clearInterval(intervalId);
+  }, [session, isLinkingTelegram]);
+
+  const handleConnectTelegram = async () => {
+    if (!session || !supabase) return;
+    try {
+      setTelegramStatusMsg("Starting link...");
+      const apiUrl = (import.meta as any).env?.VITE_BACKEND_URL || "https://clr-backend.onrender.com";
+      const res = await fetch(`${apiUrl}/api/link/start`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      const data = await res.json();
+      if (data.deep_link) {
+        setTelegramStatusMsg(null);
+        setPendingLinkData({ token: data.token, deep_link: data.deep_link });
+        setIsLinkingTelegram(true);
+      } else {
+        setTelegramStatusMsg("Failed to start link");
+        setTimeout(() => setTelegramStatusMsg(null), 3000);
+      }
+    } catch (e) {
+      console.error("Telegram connect error:", e);
+      setTelegramStatusMsg("Error connecting to backend");
+      setTimeout(() => setTelegramStatusMsg(null), 3000);
+    }
+  };
+
+  const handleDisconnectTelegram = async () => {
+    if (!supabase || !telegramLink) return;
+    await supabase.from('telegram_links').delete().eq('id', telegramLink.id);
+    setTelegramLink(null);
+  };
 
   useEffect(() => {
     if (!supabase) {
@@ -30,37 +112,56 @@ export default function App() {
       return;
     }
 
-    const init = async () => {
-      // Manual hash recovery: Supabase's detectSessionInUrl is unreliable in
-      // some build/runtime configurations, so we explicitly parse the OAuth
-      // tokens out of window.location.hash and feed them to setSession.
-      const hash = window.location.hash;
-      if (hash.includes('access_token=')) {
-        const params = new URLSearchParams(hash.substring(1));
-        const access_token = params.get('access_token');
-        const refresh_token = params.get('refresh_token');
-        if (access_token && refresh_token) {
-          const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
-          if (!error && data.session) {
+    // 1. If we are the popup, we receive the token in the URL hash.
+    // Send it to the parent window and close ourselves.
+    if (window.opener && window.name === 'oauth_popup') {
+      if (window.location.hash && window.location.hash.includes('access_token=')) {
+        window.opener.postMessage({ type: 'SUPABASE_AUTH_HASH', hash: window.location.hash }, '*');
+        window.close();
+      }
+    }
+
+    // 2. If we are the parent window, listen for the message from the popup.
+    const handleMessage = async (e: MessageEvent) => {
+      if (e.data?.type === 'SUPABASE_AUTH_HASH') {
+        const hash = e.data.hash;
+        const params = new URLSearchParams(hash.replace('#', '?'));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+          if (data.session) {
             setSession(data.session);
-            window.history.replaceState(null, '', window.location.pathname);
-            setIsInitializingAuth(false);
-            return;
           }
         }
       }
+    };
+    window.addEventListener('message', handleMessage);
 
-      const { data: { session } } = await supabase.auth.getSession();
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsInitializingAuth(false);
-    };
-    init();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      if (session && window.opener && window.name === 'oauth_popup') {
+        window.close(); // fallback close
+      }
     });
 
-    return () => subscription.unsubscribe();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session && window.opener && window.name === 'oauth_popup') {
+        window.close(); // fallback close
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   useEffect(() => {
@@ -70,17 +171,17 @@ export default function App() {
         .from('culinary_items')
         .select('*')
         .order('created_at', { ascending: false });
-
+      
       if (error) {
         console.error('Error fetching items:', error);
       } else if (data) {
         setItems(data as CulinaryItem[]);
       }
     }
-
-    // Fetch items for everyone — public SELECT policy allows unauthenticated reads.
-    // Re-fetch when session changes so the admin sees fresh data after login.
-    fetchItems();
+    
+    if (!supabase || session) {
+      fetchItems();
+    }
   }, [session]);
 
   const handleLogout = async () => {
@@ -218,19 +319,12 @@ export default function App() {
     }
   };
 
-  const handleAdminLogin = async () => {
-    if (!supabase) return;
-    const appUrl = import.meta.env.VITE_APP_URL;
-    const redirectUrl = appUrl ? appUrl.replace(/\/$/, '') + '/' : window.location.origin + '/';
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: redirectUrl },
-    });
-    if (error) console.error(error);
-  };
-
   if (isInitializingAuth) {
     return <div className="min-h-screen flex items-center justify-center bg-stone-50"><p className="text-stone-500 font-bold uppercase tracking-widest text-xs">Loading...</p></div>;
+  }
+
+  if (supabase && !session) {
+    return <AuthScreen />;
   }
 
   return (
@@ -239,7 +333,7 @@ export default function App() {
       <header className="sticky top-0 z-50 flex flex-col lg:flex-row lg:items-center justify-between px-4 sm:px-6 lg:px-10 py-4 lg:py-0 lg:h-20 border-b border-stone-200 bg-white/90 backdrop-blur-md gap-4 lg:gap-0">
         <div className="flex items-center justify-between gap-4 w-full lg:w-auto">
             <div className="flex items-center gap-4 lg:gap-8 flex-1 lg:flex-none">
-              <h1 className="font-serif text-2xl font-bold tracking-tight uppercase shrink-0">CLR<span className="text-[var(--color-accent)]">,</span></h1>
+              <h1 className="font-serif text-2xl font-bold tracking-tight uppercase shrink-0">CLR<span className="text-[var(--color-accent)]">.</span></h1>
               
               {/* Mobile Search Bar */}
               <div className="relative flex-1 lg:hidden">
@@ -290,40 +384,43 @@ export default function App() {
 
             {/* Mobile Actions */}
             <div className="lg:hidden flex items-center gap-2 shrink-0">
-              {session ? (
-                <>
-                  <button
-                    onClick={() => setIsSmartModalOpen(true)}
-                    className="h-8 px-3 bg-stone-800 rounded-full flex items-center gap-1.5 justify-center text-white shadow-lg hover:bg-stone-700 transition-colors text-[10px] font-bold uppercase"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-blue-300" />
-                    <span className="hidden sm:inline">Smart Add</span>
-                  </button>
-                  <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
-                    aria-label="Add Item"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setIsTelegramModalOpen(true)}
-                    className="h-8 w-8 bg-[#229ED9] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[#1a8bbf] transition-colors"
-                    aria-label="Connect Telegram"
-                    title="Connect Telegram"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={handleLogout} className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
-                    <LogOut className="w-3 h-3" />
-                  </button>
-                </>
-              ) : (
-                supabase && (
-                  <button onClick={handleAdminLogin} title="Admin Login" className="h-8 w-8 bg-stone-200 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-300 transition-colors">
-                    <Lock className="w-3.5 h-3.5" />
-                  </button>
-                )
+              {supabase && !telegramLink && (
+                 <button 
+                   onClick={handleConnectTelegram}
+                   disabled={isLinkingTelegram}
+                   className="h-8 w-8 bg-[#24A1DE] rounded-full flex items-center justify-center text-white shadow-lg disabled:opacity-50"
+                   aria-label="Connect Telegram"
+                 >
+                   <Send className="w-3.5 h-3.5" />
+                 </button>
+              )}
+              {supabase && telegramLink && (
+                 <button 
+                   onClick={handleDisconnectTelegram}
+                   className="h-8 px-2 bg-stone-100 border border-stone-200 text-[#24A1DE] rounded-full flex items-center gap-1 justify-center shadow-sm text-[10px] font-bold"
+                 >
+                   <Send className="w-3 h-3" />
+                   @{telegramLink.telegram_username}
+                 </button>
+              )}
+              <button 
+                onClick={() => setIsSmartModalOpen(true)}
+                className="h-8 px-3 bg-stone-800 rounded-full flex items-center gap-1.5 justify-center text-white shadow-lg hover:bg-stone-700 transition-colors text-[10px] font-bold uppercase"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+                <span className="hidden sm:inline">Smart Add</span>
+              </button>
+              <button 
+                onClick={() => setIsAddModalOpen(true)}
+                className="h-8 w-8 bg-[var(--color-accent)] rounded-full flex items-center justify-center text-white shadow-lg hover:bg-[var(--color-accent-hover)] transition-colors"
+                aria-label="Add Item"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              {supabase && (
+                <button onClick={handleLogout} className="h-8 w-8 bg-stone-800 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
+                  <LogOut className="w-3 h-3" />
+                </button>
               )}
             </div>
         </div>
@@ -419,54 +516,68 @@ export default function App() {
           </div>
           
           <div className="hidden lg:flex items-center gap-3">
-            {session ? (
-              <>
-                <button
-                  onClick={() => setIsSmartModalOpen(true)}
-                  className="flex items-center gap-2 px-4 h-10 bg-stone-800 text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-stone-700 hover:opacity-90 transition-all shrink-0"
-                >
-                  <Sparkles className="w-4 h-4 text-blue-300" />
-                  Smart Add
-                </button>
-                <button
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="flex items-center gap-2 w-10 justify-center h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
-                  title="Add Manual"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setIsTelegramModalOpen(true)}
-                  className="flex items-center gap-2 px-4 h-10 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[#1a8bbf] transition-all shrink-0"
-                  title="Connect Telegram"
-                >
-                  <Send className="w-4 h-4" />
-                  Telegram
-                </button>
-                <button onClick={handleLogout} className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-stone-700 transition">
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
-              supabase && (
-                <button
-                  onClick={handleAdminLogin}
-                  title="Admin Login"
-                  className="h-10 px-4 shrink-0 bg-stone-100 border border-stone-200 rounded-full flex items-center gap-2 text-stone-500 text-xs font-bold uppercase tracking-widest hover:bg-stone-200 transition"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  Admin
-                </button>
-              )
+            {supabase && (
+               telegramLink ? (
+                 <div className="flex items-center gap-2 px-3 h-10 border border-stone-200 rounded-full bg-stone-50 shrink-0">
+                   <Send className="w-4 h-4 text-[#24A1DE]" />
+                   <span className="text-xs font-bold uppercase tracking-widest text-[#24A1DE]">@{telegramLink.telegram_username}</span>
+                   <button onClick={handleDisconnectTelegram} className="text-stone-400 hover:text-red-500 transition-colors ml-1" title="Disconnect Telegram">
+                     <LogOut className="w-3 h-3" />
+                   </button>
+                 </div>
+               ) : (
+                 <button
+                   onClick={handleConnectTelegram}
+                   disabled={isLinkingTelegram}
+                   className="flex items-center gap-2 px-4 h-10 bg-[#24A1DE] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[#1d8ece] transition-all shrink-0 disabled:opacity-50"
+                 >
+                   <Send className="w-4 h-4" />
+                   {isLinkingTelegram ? 'Linking...' : 'Connect Telegram'}
+                 </button>
+               )
+            )}
+            <button
+              onClick={() => setIsSmartModalOpen(true)}
+              className="flex items-center gap-2 px-4 h-10 bg-stone-800 text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-stone-700 hover:opacity-90 transition-all shrink-0"
+            >
+              <Sparkles className="w-4 h-4 text-blue-300" />
+              Smart Add
+            </button>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 w-10 justify-center h-10 bg-[var(--color-accent)] text-white text-xs font-bold uppercase tracking-widest rounded-full shadow-lg hover:bg-[var(--color-accent-hover)] hover:opacity-90 transition-all shrink-0"
+              title="Add Manual"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {supabase && (
+              <button onClick={handleLogout} className="h-10 w-10 shrink-0 bg-stone-800 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-stone-700 transition">
+                <LogOut className="w-4 h-4" />
+              </button>
             )}
           </div>
         </div>
       </header>
 
+      {telegramStatusMsg && (
+        <div className="bg-stone-800 text-white text-xs font-bold tracking-widest uppercase py-2 px-4 flex justify-center items-center shadow-md">
+          {telegramStatusMsg}
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full">
         {viewMode === 'GALLERY' || viewMode === 'ARCHIVE' ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <>
+            <div className="flex items-center justify-between mb-6 text-[10px] font-bold uppercase tracking-widest text-stone-500">
+              <span>{filteredItems.length} {filteredItems.length === 1 ? 'Item' : 'Items'}</span>
+              {filteredItems.length > 0 && (
+                <span>
+                  Updated {(new Date(Math.max(...filteredItems.map(i => new Date((i as any).created_at || Date.now()).getTime())))).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
              {filteredItems.length === 0 ? (
                <EmptyState 
                  activeFilter={activeFilter} 
@@ -481,20 +592,21 @@ export default function App() {
                  // Make the first item large, then every 6th item large
                  const isFeatured = index % 5 === 0;
                  return (
-                   <ItemCard
-                     key={item.id}
-                     item={item}
+                   <ItemCard 
+                     key={item.id} 
+                     item={item} 
                      featured={isFeatured}
-                     className={isFeatured ? 'md:col-span-2 md:row-span-2' : ''}
-                     onToggleStatus={session ? handleToggleStatus : undefined}
-                     onDelete={session ? handleDeleteItem : undefined}
+                     className={isFeatured ? 'md:col-span-2 md:row-span-2' : ''} 
+                     onToggleStatus={handleToggleStatus}
+                     onDelete={handleDeleteItem}
                    />
                  );
                })
              )}
           </div>
+          </>
         ) : (
-          <MapView items={filteredItems} onToggleStatus={session ? handleToggleStatus : undefined} onDelete={session ? handleDeleteItem : undefined} />
+          <MapView items={filteredItems} onToggleStatus={handleToggleStatus} onDelete={handleDeleteItem} />
         )}
       </main>
 
@@ -515,12 +627,16 @@ export default function App() {
         onClose={() => setIsSmartModalOpen(false)}
         onItemAdded={(newItem) => setItems(prev => [newItem, ...prev])}
       />
-      <TelegramLinkModal
-        isOpen={isTelegramModalOpen}
-        onClose={() => setIsTelegramModalOpen(false)}
-        session={session}
-        onLinked={() => {}}
-      />
+      {pendingLinkData && (
+        <TelegramConnectOverlay
+          deepLink={pendingLinkData.deep_link}
+          token={pendingLinkData.token}
+          onClose={() => {
+            setPendingLinkData(null);
+            setIsLinkingTelegram(false);
+          }}
+        />
+      )}
     </div>
   );
 }
