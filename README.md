@@ -15,19 +15,28 @@ Culinary Logic Repository (CLR) is a smart, centralized hub for curating, organi
 
 ## 📸 Screenshots
 
-*(To be updated with actual project screenshots)*
-
-### Dashboard Overview
-![Dashboard Overview](./docs/images/dashboard.png)
+### Main Dashboard Grid
+![Main Grid](./screenshots/main-grid.png)
 *A masonry grid view of all curated places, recipes, and gear, filterable by contextual tags.*
 
-### Smart Add (LLM Extraction)
-![Smart Add](./docs/images/smart-add.png)
-*Pasting a simple URL or text snippet to extract magazine-style summaries and structured metadata.*
+### Map View
+![Map View](./screenshots/map-view.png)
+*Interactive map view to explore places spatially.*
 
 ### Item Details Modal
-![Item Details](./docs/images/item-details.png)
+![Item Details](./screenshots/item-details.png)
 *Detailed view showing rich context, tags, photo gallery, and specific attributes.*
+
+### Telegram Bot Integration
+![Telegram Bot Connect](./screenshots/telegram-bot-connect.png)
+*Connect your account to the companion Telegram bot.*
+
+![Telegram Conversation](./screenshots/telegram-convo.png)
+*Seamlessly ingest links and discoveries on the go via Telegram.*
+
+### Log In
+![Log In](./screenshots/log-in.png)
+*User authentication experience.*
 
 ## 🚀 Tech Stack
 

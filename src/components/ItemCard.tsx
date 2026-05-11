@@ -116,9 +116,13 @@ export default function ItemCard({ item, className = '', featured = false, onTog
             <h3 className="font-serif font-bold text-3xl sm:text-4xl leading-tight text-white mb-2">
               {item.title}
             </h3>
-            {item.specific_data?.description && (
+            {item.specific_data?.short_description || item.specific_data?.description ? (
               <p className="text-white/80 text-sm leading-relaxed mb-3 line-clamp-2">
-                {item.specific_data.description}
+                {item.specific_data?.short_description || item.specific_data?.description}
+              </p>
+            ) : (
+              <p className="text-white/50 italic text-sm leading-relaxed mb-3 line-clamp-2">
+                No description provided.
               </p>
             )}
             {item.rating && (
@@ -138,9 +142,13 @@ export default function ItemCard({ item, className = '', featured = false, onTog
               <h3 className="font-serif font-bold text-xl leading-tight text-[var(--color-primary-text)]">
                 {item.title}
               </h3>
-              {item.specific_data?.description && (
+              {item.specific_data?.short_description || item.specific_data?.description ? (
                 <p className="text-stone-500 text-[11px] leading-relaxed mt-1 line-clamp-2">
-                  {item.specific_data.description}
+                  {item.specific_data?.short_description || item.specific_data?.description}
+                </p>
+              ) : (
+                <p className="text-stone-400 italic text-[11px] leading-relaxed mt-1 line-clamp-2">
+                  No description provided.
                 </p>
               )}
             </div>
@@ -207,9 +215,13 @@ export default function ItemCard({ item, className = '', featured = false, onTog
       {featured && (
          <motion.div layout className="p-6 bg-white flex flex-col flex-grow justify-between border-t border-stone-100">
             <div>
-              {item.specific_data?.description && (
+              {item.specific_data?.short_description || item.specific_data?.description ? (
                 <p className="text-stone-500 text-sm leading-relaxed mb-3">
-                  {item.specific_data.description}
+                  {item.specific_data?.short_description || item.specific_data?.description}
+                </p>
+              ) : (
+                <p className="text-stone-400 italic text-sm leading-relaxed mb-3">
+                  No description provided.
                 </p>
               )}
               {item.personal_review && (

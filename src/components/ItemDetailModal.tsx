@@ -69,9 +69,10 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
       return (
         <div className="space-y-6">
           {/* Description */}
-          {sd.description && (
-            <p className="text-stone-700 text-sm leading-relaxed mb-4">{sd.description}</p>
-          )}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">Description</h4>
+            <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap">{sd.description || sd.short_description || <span className="italic text-stone-400">No description provided.</span>}</p>
+          </div>
 
           {/* Photo gallery */}
           {Array.isArray(sd.photos) && sd.photos.length > 0 && (
@@ -177,9 +178,10 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
       return (
         <div className="space-y-8">
            {/* Description */}
-           {sd.description && (
-             <p className="text-stone-700 text-sm leading-relaxed">{sd.description}</p>
-           )}
+           <div className="mb-4">
+             <h4 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">Description</h4>
+             <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap">{sd.description || sd.short_description || <span className="italic text-stone-400">No description provided.</span>}</p>
+           </div>
 
            {/* Photo gallery */}
            {Array.isArray(sd.photos) && sd.photos.length > 0 && (
@@ -266,9 +268,10 @@ export default function ItemDetailModal({ item, isOpen, onClose, onToggleStatus,
       return (
         <div className="space-y-6">
            {/* Description */}
-           {sd.description && (
-             <p className="text-stone-700 text-sm leading-relaxed mb-4">{sd.description}</p>
-           )}
+           <div className="mb-4">
+             <h4 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">Description</h4>
+             <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-wrap">{sd.description || sd.short_description || <span className="italic text-stone-400">No description provided.</span>}</p>
+           </div>
 
            {/* Photo gallery */}
            {Array.isArray(sd.photos) && sd.photos.length > 0 && (
