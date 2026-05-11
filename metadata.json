@@ -1,6 +1,6 @@
 {
   "name": "Culinary Logic Repository",
-  "description": "",
+  "description": "A smart, centralized hub for curating, organizing, and exploring your favorite culinary discoveries including places, recipes, and gear, powered by LLM extraction.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
