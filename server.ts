@@ -1,114 +1,19 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
-import * as cheerio from 'cheerio';
 import * as dotenv from 'dotenv';
+import { extractUrl, sendTelegramMessage, scrapeMetadata, geocodeAddress } from './src/lib/serverUtils.js';
 
 dotenv.config();
 
 // Keys & Config
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const MAPS_API_KEY = process.env.MAPS_API_KEY; // Optional for geocoding
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-async function sendTelegramMessage(chatId: string | number, text: string) {
-  if (!TELEGRAM_BOT_TOKEN) {
-    console.log(`Would send to Telegram (${chatId}): ${text}`);
-    return;
-  }
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text })
-    });
-  } catch (err) {
-    console.error("Failed to send telegram message", err);
-  }
-}
-
-function extractUrl(text: string): string | null {
-  const urls = text.match(/(https?:\/\/[^\s]+)/);
-  return urls ? urls[0] : null;
-}
-
-async function scrapeMetadata(url: string) {
-  try {
-    // robust method using Microlink
-    const microlinkUrl = `https://api.microlink.io?url=${encodeURIComponent(url)}`;
-    const mlResponse = await fetch(microlinkUrl, { signal: AbortSignal.timeout(10000) });
-    const json = await mlResponse.json();
-    
-    if (json.status === 'success') {
-      const data = json.data || {};
-      const title = data.title || "Unknown Title";
-      const description = data.description || "";
-      let thumbnailUrl = "";
-      
-      if (typeof data.image === 'object' && data.image !== null) {
-        thumbnailUrl = data.image.url || "";
-      } else if (typeof data.image === 'string') {
-        thumbnailUrl = data.image;
-      }
-      
-      if (!thumbnailUrl) {
-        thumbnailUrl = "https://images.unsplash.com/photo-1498837167922-41c46b3f6162?q=80&w=400&auto=format&fit=crop";
-      }
-      return { thumbnailUrl, title, description };
-    }
-  } catch (e) {
-    console.error(`Microlink API error for ${url}:`, e);
-  }
-
-  // fallback to cheerio
-  try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' },
-      signal: AbortSignal.timeout(5000)
-    });
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    
-    const title = $('meta[property="og:title"]').attr('content') || $('title').text() || "Unknown Title";
-    const description = $('meta[property="og:description"]').attr('content') || "";
-    const thumbnailUrl = $('meta[property="og:image"]').attr('content') || "https://images.unsplash.com/photo-1498837167922-41c46b3f6162?q=80&w=400&auto=format&fit=crop";
-    
-    return { thumbnailUrl, title, description };
-  } catch (e) {
-    console.error(`Scraping error for ${url}:`, e);
-    return { 
-      thumbnailUrl: "https://images.unsplash.com/photo-1498837167922-41c46b3f6162?q=80&w=400&auto=format&fit=crop", 
-      title: "Unknown Title", 
-      description: "" 
-    };
-  }
-}
-
-async function geocodeAddress(address: string) {
-  if (!MAPS_API_KEY) {
-    console.warn("MAPS_API_KEY not set. Skipping geocoding.");
-    return { lat: 0, lng: 0, address };
-  }
-  
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${MAPS_API_KEY}`;
-  try {
-    const response = await fetch(url);
-    const res = await response.json();
-    
-    if (res.status === 'OK' && res.results.length > 0) {
-      const loc = res.results[0].geometry.location;
-      const fmtAddress = res.results[0].formatted_address;
-      return { lat: loc.lat, lng: loc.lng, address: fmtAddress };
-    }
-  } catch (e) {
-    console.error("Geocoding Error:", e);
-  }
-  return { lat: 0, lng: 0, address };
-}
+export { extractUrl, sendTelegramMessage, scrapeMetadata, geocodeAddress };
 
 async function startServer() {
   const app = express();
@@ -250,7 +155,7 @@ async function startServer() {
     // In production (if we want to serve static files from dist folder)
     const distPath = process.cwd() + '/dist';
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('/{*path}', (req, res) => {
       res.sendFile(distPath + '/index.html');
     });
   }

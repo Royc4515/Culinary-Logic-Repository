@@ -4,6 +4,8 @@ gunicorn
 groq
 supabase
 python-dotenv
-requests
+requests>=2.34.2
 beautifulsoup4
-microlink
+pytest
+pytest-flask
+responses
