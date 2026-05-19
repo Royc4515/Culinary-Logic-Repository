@@ -250,7 +250,7 @@ async function startServer() {
     // In production (if we want to serve static files from dist folder)
     const distPath = process.cwd() + '/dist';
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('/{*path}', (req, res) => {
       res.sendFile(distPath + '/index.html');
     });
   }
