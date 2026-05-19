@@ -6,3 +6,6 @@ supabase
 python-dotenv
 requests>=2.34.2
 beautifulsoup4
+pytest
+pytest-flask
+responses
