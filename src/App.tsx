@@ -75,9 +75,14 @@ export default function App() {
 
   const handleConnectTelegram = async () => {
     if (!session || !supabase) return;
+    const apiUrl = (import.meta as any).env?.VITE_BACKEND_URL;
+    if (!apiUrl) {
+      setTelegramStatusMsg("Backend URL not configured (set VITE_BACKEND_URL)");
+      setTimeout(() => setTelegramStatusMsg(null), 3000);
+      return;
+    }
     try {
       setTelegramStatusMsg("Starting link...");
-      const apiUrl = (import.meta as any).env?.VITE_BACKEND_URL || "https://clr-backend.onrender.com";
       const res = await fetch(`${apiUrl}/api/link/start`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` }

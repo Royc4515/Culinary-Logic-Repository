@@ -3,14 +3,14 @@ Register (or clear) the Telegram webhook for the CLR bot.
 
 Usage:
   # Set the webhook to your production URL:
-  python set_webhook.py https://clr-backend.onrender.com/api/webhook
+  python set_webhook.py https://your-backend.example.com/api/webhook
 
   # Clear the webhook (switches bot back to polling mode):
   python set_webhook.py --delete
 
 Equivalent curl commands:
   # Set:
-  curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://clr-backend.onrender.com/api/webhook"
+  curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-backend.example.com/api/webhook"
 
   # Delete:
   curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
