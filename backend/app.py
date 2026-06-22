@@ -25,6 +25,10 @@ MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
 SUPABASE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 
+# Comma-separated list of origins allowed to call this API via CORS.
+# When unset (e.g. local dev) CORS falls back to permissive "*".
+ALLOWED_ORIGINS = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
+
 MODELS_TO_TRY = [
     "llama-3.3-70b-versatile",   # Primary – High Intelligence
     "llama-3.1-70b-versatile",   # Backup A – High Reliability
@@ -39,7 +43,15 @@ supabase: Client | None = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_
 # Allow the frontend (different origin) to call /api/link/start.
 @app.after_request
 def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("Origin", "")
+    if ALLOWED_ORIGINS:
+        # Restrict to the configured allowlist; echo back the origin if it matches.
+        if origin in ALLOWED_ORIGINS:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+    else:
+        # No allowlist configured (e.g. local dev) — allow any origin.
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
