@@ -20,3 +20,7 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Set this to your deployed frontend URL (e.g. https://your-app.vercel.app)
+      # to restrict CORS. Leave unset to allow any origin.
+      - key: ALLOWED_ORIGINS
+        sync: false
