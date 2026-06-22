@@ -4,14 +4,14 @@ Culinary Logic Repository (CLR) is a smart, centralized hub for curating, organi
 
 ## 🌟 Features
 
-- **Smart LLM Ingestion**: Paste a URL or rough text, and CLR automatically extracts structured metadata (title, location, vibe, ingredients, pros/cons) using an advanced LLM pipeline.
+- **AI Ingestion via Telegram**: Send a URL (Instagram, TikTok, article, Google Maps link) or a rough text note to the companion Telegram bot. CLR scrapes the page, enriches places via Google Places, and uses an LLM (Groq) to extract structured metadata (title, location, vibe, ingredients, pros/cons) before saving it to your repository. *The Telegram bot is the AI entry point — the web app itself uses a structured manual-add form (below).*
+- **Manual Add in the Web App**: Prefer to enter things yourself? Add and edit items directly through a structured form in the web app.
 - **Categorization**: Items are neatly categorized into:
   - 🍽️ **Places**: Restaurants, cafes, and bars with detailed info like cuisines, vibes, best for, and opening hours.
   - 📖 **Recipes**: Total time, difficulty, ingredients, and key techniques.
   - 🔪 **Gear**: Brand, category, price, pros, and cons.
 - **Beautiful & Responsive UI**: Built with React and Tailwind CSS, featuring masonry grid layouts, filter tags, and rich item detail modals.
-- **Telegram Bot Integration**: Seamlessly ingest links and discoveries on the go by sending them to the CLR Telegram bot.
-- **Image Fallbacks**: Robust image fallback mechanisms using Unsplash & Google Places to ensure beautiful visuals when OpenGraph scraping fails.
+- **Image Fallbacks**: When OpenGraph scraping yields no image, CLR falls back to Google Places photos and a set of curated, on-theme images so cards always look good.
 
 ## 📸 Screenshots
 
@@ -38,10 +38,19 @@ Culinary Logic Repository (CLR) is a smart, centralized hub for curating, organi
 ![Log In](./screenshots/log-in.png)
 *User authentication experience.*
 
+## 🏗️ Architecture
+
+CLR is split into two independently-deployed pieces:
+
+- A **Vite/React single-page app** (hosted statically; `server.ts` is only a thin dev/host wrapper and contains no API logic).
+- A separate **Python/Flask backend** (`backend/`, deployed on Render) that owns *all* server logic: the Telegram webhook, scraping, Google Places enrichment, the Groq LLM extraction, and Supabase writes.
+
+The frontend talks to the backend over HTTP (`VITE_BACKEND_URL`) and reads/writes Supabase directly (guarded by Row-Level Security).
+
 ## 🚀 Tech Stack
 
 - **Frontend**: React, Vite, Tailwind CSS, pre-built components (Lucide React & Framer Motion).
-- **Backend (Python)**: Flask/Gunicorn python ingestion engine using BeautifulSoup for scraping and the Groq LLM API for advanced text extraction. 
+- **Backend (Python)**: Flask/Gunicorn ingestion engine using BeautifulSoup for scraping and the Groq LLM API for text extraction. 
 - **Database**: Supabase (PostgreSQL) for remote data storage.
 - **APIs**: 
   - Google Places API (Geocoding & Photos)
@@ -64,7 +73,7 @@ Culinary Logic Repository (CLR) is a smart, centralized hub for curating, organi
    ```bash
    cd backend
    pip install -r requirements.txt
-   flask run
+   python app.py
    ```
 
 ## 🤝 Contributing
