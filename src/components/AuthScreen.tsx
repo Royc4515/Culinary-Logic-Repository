@@ -80,7 +80,7 @@ export default function AuthScreen() {
           <div className="mt-8 text-center text-xs text-stone-500 font-medium">
             <p>You must authenticate to access your culinary database.</p>
             <p className="mt-2 text-[10px]">
-              Be sure to add <strong className="text-stone-700">{window.location.origin}</strong> to your Google OAuth Authorized Redirect URIs in the Google Cloud Console.
+              Sign-in failing? Add <strong className="text-stone-700">{window.location.origin}/**</strong> to your Supabase Auth Redirect URLs, and the Supabase callback URL to your Google OAuth client.
             </p>
           </div>
         </div>
