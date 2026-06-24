@@ -11,6 +11,12 @@ import TelegramConnectOverlay from './components/TelegramConnectOverlay';
 
 type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
 
+// Base URL of the Flask backend (Telegram link/webhook, LLM extraction). Falls
+// back to the deployed Render service so the app works even if VITE_BACKEND_URL
+// isn't configured in the host. A backend URL is not secret.
+const BACKEND_URL =
+  (import.meta as any).env?.VITE_BACKEND_URL || 'https://clr-backend.onrender.com';
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [items, setItems] = useState<CulinaryItem[]>(supabase ? [] : mockItems);
@@ -75,15 +81,9 @@ export default function App() {
 
   const handleConnectTelegram = async () => {
     if (!session || !supabase) return;
-    const apiUrl = (import.meta as any).env?.VITE_BACKEND_URL;
-    if (!apiUrl) {
-      setTelegramStatusMsg("Backend URL not configured (set VITE_BACKEND_URL)");
-      setTimeout(() => setTelegramStatusMsg(null), 3000);
-      return;
-    }
     try {
       setTelegramStatusMsg("Starting link...");
-      const res = await fetch(`${apiUrl}/api/link/start`, {
+      const res = await fetch(`${BACKEND_URL}/api/link/start`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
