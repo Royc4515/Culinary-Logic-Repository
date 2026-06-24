@@ -1,0 +1,28 @@
+# Render Blueprint — deploys the Flask backend in backend/ as a free web service.
+# In the Render dashboard: New + → Blueprint → pick this repo. Render reads this
+# file, creates the service, and prompts for the secret values (sync: false).
+services:
+  - type: web
+    name: culinary-logic-backend
+    plan: free
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    envVars:
+      # Pre-filled, non-secret:
+      - key: SUPABASE_URL
+        value: https://xsyrpowvawcfqeduhpvv.supabase.co
+      - key: ALLOWED_ORIGINS
+        value: https://culinary-logic-repository.vercel.app
+      # Secrets — you enter these in the Render UI during deploy:
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MAPS_API_KEY
+        sync: false
