@@ -115,13 +115,42 @@ export default function App() {
       return;
     }
 
-    // Same-tab OAuth: on return from Google the client (detectSessionInUrl)
-    // consumes the auth code from the URL and establishes the session, which
-    // surfaces here via getSession() / onAuthStateChange.
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Same-tab OAuth: on return from Google the implicit-flow token arrives in
+    // the URL hash. detectSessionInUrl normally consumes it, but we also do it
+    // explicitly here as a fallback and to surface any error instead of silently
+    // dropping the user back on the login screen.
+    const finishUrlAuth = async () => {
+      const rawHash = window.location.hash.startsWith('#')
+        ? window.location.hash.slice(1)
+        : '';
+      const params = new URLSearchParams(rawHash);
+
+      const oauthError = params.get('error_description') || params.get('error');
+      if (oauthError) {
+        console.error('OAuth error on return:', oauthError);
+      }
+
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) {
+          console.error('setSession failed:', error.message);
+        } else if (data.session) {
+          setSession(data.session);
+        }
+        // Strip the token from the URL so it isn't left in history.
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setIsInitializingAuth(false);
-    });
+    };
+    finishUrlAuth();
 
     const {
       data: { subscription },

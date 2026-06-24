@@ -6,11 +6,12 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        // Standard same-tab redirect flow: after Google -> Supabase the browser
-        // returns to the app with the auth result in the URL, and the client
-        // detects + consumes it automatically (no popup / postMessage needed).
+        // Same-tab redirect flow. Use the implicit grant so Supabase returns the
+        // session token directly in the URL (#access_token=...) on return — the
+        // client reads it synchronously with no code-exchange round-trip that can
+        // fail. detectSessionInUrl consumes it automatically on load.
+        flowType: 'implicit',
         detectSessionInUrl: true,
-        flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
       },
