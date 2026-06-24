@@ -14,29 +14,21 @@ export default function AuthScreen() {
 
     try {
       let redirectUrl = window.location.origin + '/';
-      // When running behind a tunnel/proxy (e.g. a cloud dev environment), the OAuth
-      // popup must redirect to the publicly-exposed URL rather than localhost.
+      // When running behind a tunnel/proxy (e.g. a cloud dev environment), the
+      // OAuth redirect must point at the publicly-exposed URL, not localhost.
       const devRedirect = (import.meta as any).env?.VITE_APP_URL;
       if (window.location.origin.includes('localhost') && devRedirect) {
          redirectUrl = devRedirect;
       }
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      // Full-page redirect to Google in the same tab. On return, the supabase
+      // client (detectSessionInUrl) consumes the auth result automatically.
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        }
+        options: { redirectTo: redirectUrl },
       });
       if (error) throw error;
-
-      if (data?.url) {
-        const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
-        if (!authWindow) {
-           setError('Please allow popups to sign in with Google.');
-           setLoading(false);
-        }
-      }
+      // Browser is now navigating away to Google; keep the loading state.
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
       setLoading(false);
