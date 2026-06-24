@@ -74,7 +74,7 @@ export default function AddManualItemModal({ isOpen, onClose, onItemAdded }: Add
     const payload = {
       type,
       title,
-      thumbnail_url: thumbnailUrl || 'https://via.placeholder.com/400?text=No+Image',
+      thumbnail_url: thumbnailUrl || 'https://images.unsplash.com/photo-1498837167922-41c46b3f6162?q=80&w=1600&auto=format&fit=crop',
       original_url: originalUrl,
       context_tags: tagsArray,
       status,

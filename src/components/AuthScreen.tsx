@@ -14,9 +14,11 @@ export default function AuthScreen() {
 
     try {
       let redirectUrl = window.location.origin + '/';
-      if (window.location.origin.includes('localhost')) {
-         // Inside AI Studio iframe, we must use the exposed tunnel URL so the popup works
-         redirectUrl = 'https://ais-dev-gn6pqrdw3kgg5hn4ye6mvn-80745451536.europe-west1.run.app/';
+      // When running behind a tunnel/proxy (e.g. a cloud dev environment), the OAuth
+      // popup must redirect to the publicly-exposed URL rather than localhost.
+      const devRedirect = (import.meta as any).env?.VITE_APP_URL;
+      if (window.location.origin.includes('localhost') && devRedirect) {
+         redirectUrl = devRedirect;
       }
 
       const { data, error } = await supabase.auth.signInWithOAuth({

@@ -5,9 +5,11 @@ do $$
 declare
   admin_id uuid;
 begin
+  -- Set this to the email of the account that should inherit any pre-existing
+  -- (orphan) items. If it doesn't match a user, the fallbacks below are used.
   select id into admin_id
   from auth.users
-  where email = 'roy.y.carmelli@gmail.com'
+  where email = 'YOUR_ADMIN_EMAIL@example.com'
   limit 1;
 
   if admin_id is null then

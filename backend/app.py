@@ -25,6 +25,10 @@ MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
 SUPABASE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 
+# Comma-separated list of origins allowed to call this API via CORS.
+# When unset (e.g. local dev) CORS falls back to permissive "*".
+ALLOWED_ORIGINS = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
+
 MODELS_TO_TRY = [
     "llama-3.3-70b-versatile",   # Primary – High Intelligence
     "llama-3.1-70b-versatile",   # Backup A – High Reliability
@@ -39,7 +43,15 @@ supabase: Client | None = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_
 # Allow the frontend (different origin) to call /api/link/start.
 @app.after_request
 def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    origin = request.headers.get("Origin", "")
+    if ALLOWED_ORIGINS:
+        # Restrict to the configured allowlist; echo back the origin if it matches.
+        if origin in ALLOWED_ORIGINS:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+    else:
+        # No allowlist configured (e.g. local dev) — allow any origin.
+        response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
@@ -90,23 +102,44 @@ def extract_url(text):
     urls = re.findall(r'(https?://[^\s]+)', text)
     return urls[0] if urls else None
 
-PLACEHOLDER_IMG = "https://via.placeholder.com/400?text=No+Thumbnail"
+# Curated, on-theme fallback imagery. These are direct Unsplash CDN asset URLs
+# (NOT the retired source.unsplash.com dynamic endpoint) reused from the app's own
+# mock data, so they are known to render reliably.
+_UNSPLASH = "https://images.unsplash.com/photo-{id}?q=80&w=1600&auto=format&fit=crop"
+FALLBACK_IMAGES = {
+    "PLACE": [
+        _UNSPLASH.format(id="1514933651103-005eec06c04b"),   # warm restaurant
+        _UNSPLASH.format(id="1600891964092-4316c288032e"),   # brasserie / dining room
+        _UNSPLASH.format(id="1550966871-3ed3cdb5ed0c"),      # fine dining
+        _UNSPLASH.format(id="1555939594-58d7cb561ad1"),      # casual eatery
+    ],
+    "RECIPE": [
+        _UNSPLASH.format(id="1600891963951-460d3d57d76f"),   # plated dish
+        _UNSPLASH.format(id="1628169125139-4bb42fcadfc3"),   # appetizer
+    ],
+    "GEAR": [
+        _UNSPLASH.format(id="1584803735147-19612c75a40a"),   # cast iron skillet
+        _UNSPLASH.format(id="1579888944594-39c28892d5c3"),   # kitchen gadget
+    ],
+}
+
+# Generic, always-working "no image yet" sentinel (used as a marker AND a safe
+# last-resort image). Matches the food fallback used by the TS dev server.
+PLACEHOLDER_IMG = _UNSPLASH.format(id="1498837167922-41c46b3f6162")
+
 
 def get_fallback_image(title, tags, item_type):
-    keywords = []
-    if title and title != "Untitled Item":
-        clean_title = re.sub(r'[^a-zA-Z0-9\s]', '', title).strip()
-        if clean_title:
-            keywords.append(clean_title)
-    if tags:
-        keywords.extend([re.sub(r'[^a-zA-Z0-9\s]', '', t).strip() for t in tags[:2]])
-    
-    query = ",".join([k for k in keywords if k])
-    if not query:
-        query = "restaurant" if item_type == "PLACE" else "food,cooking" if item_type == "RECIPE" else "kitchen,gear"
+    """Return an on-theme, reliably-rendering image when no scraped/Places photo exists.
 
-    fallback_url = f"https://source.unsplash.com/1600x900/?{urllib.parse.quote(query)}"
-    print(f"[fallback] Using Unsplash fallback image for query '{query}': {fallback_url}")
+    Picks deterministically from FALLBACK_IMAGES so the same item always gets the same
+    image. `tags` is accepted for backwards-compatibility but no longer used for lookup.
+    """
+    options = FALLBACK_IMAGES.get(item_type) or FALLBACK_IMAGES["PLACE"]
+    # Stable index: Python's built-in hash() of a str is per-process salted, so derive
+    # our own deterministic value from the title instead.
+    idx = sum(ord(c) for c in (title or "")) % len(options)
+    fallback_url = options[idx]
+    print(f"[fallback] Using curated {item_type} fallback image: {fallback_url}")
     return fallback_url
 
 
@@ -203,7 +236,7 @@ def scrape_metadata(url):
     except Exception as e:
         print(f"Fallback scraping error for {url}: {e}")
         return {
-            "thumbnail_url": "https://via.placeholder.com/400?text=Extraction+Failed",
+            "thumbnail_url": PLACEHOLDER_IMG,
             "images": [],
             "title": "Unknown Title",
             "description": "",
@@ -524,7 +557,7 @@ def telegram_webhook():
 
     url = extract_url(text)
     scraped = {
-        "thumbnail_url": "https://via.placeholder.com/400?text=Text+Only",
+        "thumbnail_url": PLACEHOLDER_IMG,
         "images": [],
         "title": "",
         "description": "",
@@ -628,7 +661,7 @@ def telegram_webhook():
 
     # Evaluate thumbnail_url: Use photos[0] (which may be from Places API) or scraped valid image
     base_thumbnail = photos[0] if photos else scraped.get("thumbnail_url")
-    if not base_thumbnail or base_thumbnail == PLACEHOLDER_IMG or "Extraction+Failed" in base_thumbnail or "Text+Only" in base_thumbnail:
+    if not base_thumbnail or base_thumbnail == PLACEHOLDER_IMG:
         thumbnail_url = get_fallback_image(extracted_data.get("title"), extracted_data.get("context_tags", []), item_type)
         if thumbnail_url and thumbnail_url not in photos:
             photos.insert(0, thumbnail_url)
