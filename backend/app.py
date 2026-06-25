@@ -350,7 +350,10 @@ def get_user_id_for_telegram(telegram_id):
 
 
 def handle_link_command(message, chat_id, text):
-    token = text[len("/start link_"):].strip()
+    # Accept the link token however it arrives: "/start link_<tok>", a bare
+    # "link_<tok>", or the two split across whitespace/newlines by copy-paste.
+    m = re.search(r'link_([A-Za-z0-9_\-]+)', text)
+    token = m.group(1) if m else ""
     telegram_id = message["from"]["id"]
     username = message["from"].get("username")
 
@@ -520,7 +523,9 @@ def telegram_webhook():
     text = (message.get("text") or "").strip()
     telegram_id = message["from"]["id"]
 
-    if text.startswith("/start link_"):
+    # A linking token (link_<random>) may arrive as "/start link_x", a bare
+    # "link_x", or split across lines by copy-paste — match it anywhere.
+    if re.search(r'link_[A-Za-z0-9_\-]{20,}', text):
         handle_link_command(message, chat_id, text)
         return jsonify({"status": "ok"}), 200
 
