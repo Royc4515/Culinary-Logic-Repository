@@ -11,6 +11,13 @@ export default function TelegramConnectOverlay({ deepLink, token, onClose }: Pro
   const [copied, setCopied] = useState(false);
   const command = `/start link_${token}`;
 
+  // Derive the bot username from the deep link so we can also offer Telegram Web
+  // (for laptops with no Telegram desktop app installed).
+  const botUsername = (deepLink.match(/t\.me\/([^/?]+)/) || [])[1] || '';
+  const webLink = botUsername
+    ? `https://web.telegram.org/k/#@${botUsername}`
+    : 'https://web.telegram.org/';
+
   const handleCopy = async () => {
     await navigator.clipboard.writeText(command);
     setCopied(true);
@@ -38,15 +45,27 @@ export default function TelegramConnectOverlay({ deepLink, token, onClose }: Pro
             </div>
           </div>
 
-          {/* Primary: open Telegram app */}
+          {/* Primary: open the Telegram app (mobile / desktop app) */}
           <a
             href={deepLink}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#1a8bbf] transition-colors shadow-md mb-5"
+            className="flex items-center justify-center gap-2 w-full py-3 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#1a8bbf] transition-colors shadow-md mb-3"
           >
             <ExternalLink className="w-4 h-4" />
-            Open in Telegram
+            Open in Telegram App
+          </a>
+
+          {/* For laptops without the desktop app: open Telegram Web, then paste
+              the command below. */}
+          <a
+            href={webLink}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-2.5 bg-white border border-[#229ED9] text-[#229ED9] text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#229ED9]/5 transition-colors mb-5"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Open Telegram Web
           </a>
 
           {/* Divider */}
