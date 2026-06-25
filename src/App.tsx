@@ -15,7 +15,7 @@ type ViewMode = 'GALLERY' | 'MAP' | 'ARCHIVE';
 // back to the deployed Render service so the app works even if VITE_BACKEND_URL
 // isn't configured in the host. A backend URL is not secret.
 const BACKEND_URL =
-  (import.meta as any).env?.VITE_BACKEND_URL || 'https://clr-backend.onrender.com';
+  (import.meta as any).env?.VITE_BACKEND_URL || 'https://culinary-logic-backend.onrender.com';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
