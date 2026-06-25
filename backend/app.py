@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import html as _html
 import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -72,23 +73,86 @@ def telegram_request(method, payload):
         return None
 
 
-def send_message(chat_id, text):
-    """Send a Telegram message and return its message_id (or None)."""
-    res = telegram_request("sendMessage", {"chat_id": chat_id, "text": text})
+def send_message(chat_id, text, reply_markup=None, parse_mode=None):
+    """Send a Telegram message and return its message_id (or None).
+
+    Optional inline keyboard (reply_markup) and parse_mode ("HTML"). If an
+    HTML send fails (e.g. bad entity), retry once as plain text so the user
+    still receives the message.
+    """
+    payload = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    res = telegram_request("sendMessage", payload)
     if res and res.get("ok"):
         return res.get("result", {}).get("message_id")
+    if parse_mode:  # fallback to plain text
+        res = telegram_request("sendMessage", {"chat_id": chat_id, "text": text})
+        if res and res.get("ok"):
+            return res.get("result", {}).get("message_id")
     return None
 
 
-def edit_message(chat_id, message_id, text):
+def edit_message(chat_id, message_id, text, reply_markup=None, parse_mode=None):
     if message_id is None:
-        send_message(chat_id, text)
+        return send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    res = telegram_request("editMessageText", payload)
+    if res is None and parse_mode:  # fallback to plain text
+        telegram_request("editMessageText", {"chat_id": chat_id, "message_id": message_id, "text": text})
+
+
+def send_chat_action(chat_id, action="typing"):
+    """Show a transient 'typing…' indicator. Best-effort; failures are ignored."""
+    telegram_request("sendChatAction", {"chat_id": chat_id, "action": action})
+
+
+def answer_callback_query(callback_query_id, text=""):
+    """Dismiss the loading spinner after an inline-button tap (optional toast)."""
+    telegram_request("answerCallbackQuery", {"callback_query_id": callback_query_id, "text": text})
+
+
+def remove_inline_keyboard(chat_id, message_id):
+    """Strip a message's inline buttons so they can't be tapped again."""
+    telegram_request("editMessageReplyMarkup", {"chat_id": chat_id, "message_id": message_id})
+
+
+def set_my_commands(commands):
+    """Register the '/' command palette (run once, not per request)."""
+    return telegram_request("setMyCommands", {"commands": commands})
+
+
+def esc(s):
+    """Escape dynamic text for Telegram HTML parse_mode."""
+    return _html.escape(str(s if s is not None else ""))
+
+
+# Slash-command menu shown in Telegram's "/" palette.
+BOT_COMMANDS = [
+    {"command": "help", "description": "What I can do & how to link this chat"},
+    {"command": "list", "description": "Your last 5 saved items"},
+    {"command": "undo", "description": "Remove your last saved item"},
+]
+
+_commands_registered = False
+
+
+def ensure_commands_registered():
+    """Register the command menu once per process (lazily, on first update)."""
+    global _commands_registered
+    if _commands_registered:
         return
-    telegram_request("editMessageText", {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "text": text,
-    })
+    _commands_registered = True
+    try:
+        set_my_commands(BOT_COMMANDS)
+    except Exception as e:
+        print(f"[commands] register error: {e}")
 
 
 # Kept for backwards-compat with any other callers.
@@ -450,15 +514,71 @@ def handle_undo(chat_id, user_id):
             .limit(1)
             .execute()
         )
-        if not res.data:
-            send_message(chat_id, "Nothing to undo.")
-            return
-        last = res.data[0]
-        supabase.table("culinary_items").delete().eq("id", last["id"]).execute()
-        send_message(chat_id, f"🗑️ Deleted: {last['title']}")
     except Exception as e:
         print(f"[undo] {e}")
-        send_message(chat_id, "❌ Couldn't delete the last item.")
+        send_message(chat_id, "❌ Couldn't fetch your last item.")
+        return
+    if not res.data:
+        send_message(chat_id, "Nothing to undo.")
+        return
+    last = res.data[0]
+    # Two-step confirm: deleting is destructive, so ask first.
+    keyboard = {"inline_keyboard": [[
+        {"text": "🗑️ Delete", "callback_data": f"rm:{last['id']}"},
+        {"text": "Cancel", "callback_data": "cancel"},
+    ]]}
+    send_message(
+        chat_id,
+        f"Remove your last item — <b>{esc(last['title'])}</b>?",
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+
+
+def handle_callback_query(cq):
+    """Handle inline-button taps: remove an item (rm:<id>) or cancel."""
+    cq_id = cq.get("id")
+    data = (cq.get("data") or "").strip()
+    msg = cq.get("message") or {}
+    chat_id = (msg.get("chat") or {}).get("id")
+    message_id = msg.get("message_id")
+    telegram_id = (cq.get("from") or {}).get("id")
+
+    if data == "cancel":
+        answer_callback_query(cq_id, "Cancelled")
+        if chat_id and message_id:
+            edit_message(chat_id, message_id, "✖️ Cancelled.")
+        return
+
+    if data.startswith("rm:"):
+        item_id = data[3:]
+        user_id = get_user_id_for_telegram(telegram_id)
+        if not user_id:
+            answer_callback_query(cq_id, "This chat isn't linked.")
+            return
+        try:
+            # Scope by user_id so a tap can only remove the caller's own item.
+            found = (
+                supabase.table("culinary_items")
+                .select("title")
+                .eq("id", item_id).eq("user_id", user_id).execute()
+            )
+            if not found.data:
+                answer_callback_query(cq_id, "Already removed")
+                if chat_id and message_id:
+                    remove_inline_keyboard(chat_id, message_id)
+                return
+            title = found.data[0].get("title", "item")
+            supabase.table("culinary_items").delete().eq("id", item_id).eq("user_id", user_id).execute()
+            answer_callback_query(cq_id, "Removed ✓")
+            if chat_id and message_id:
+                edit_message(chat_id, message_id, f"🗑️ Removed <b>{esc(title)}</b>.", parse_mode="HTML")
+        except Exception as e:
+            print(f"[callback rm] {e}")
+            answer_callback_query(cq_id, "Couldn't remove it")
+        return
+
+    answer_callback_query(cq_id)
 
 
 # ---------- Routes ----------
@@ -515,7 +635,17 @@ def link_start():
 @app.route('/api/webhook', methods=['POST'])
 def telegram_webhook():
     update = request.get_json()
-    if not update or "message" not in update:
+    if not update:
+        return jsonify({"status": "ignored"}), 200
+
+    ensure_commands_registered()
+
+    # Inline-button taps (confirm / remove / cancel).
+    if "callback_query" in update:
+        handle_callback_query(update["callback_query"])
+        return jsonify({"status": "ok"}), 200
+
+    if "message" not in update:
         return jsonify({"status": "ignored"}), 200
 
     message = update["message"]
@@ -555,9 +685,11 @@ def telegram_webhook():
         )
         return jsonify({"status": "not_linked"}), 200
 
+    send_chat_action(chat_id, "typing")
     progress_id = send_message(chat_id, "🔍 Processing your culinary intel...")
 
     def progress(t):
+        send_chat_action(chat_id, "typing")
         edit_message(chat_id, progress_id, t)
 
     url = extract_url(text)
@@ -704,12 +836,20 @@ def telegram_webhook():
         return jsonify({"status": "error"}), 500
 
     title = payload.get("title", "Untitled Item")
+    item_id = payload.get("id")
     has_pin = (
         item_type == "PLACE"
         and isinstance(payload.get("specific_data", {}).get("location"), dict)
         and payload["specific_data"]["location"].get("lat", 0) != 0
     )
-    progress(f"✅ Saved: {title} ({item_type}){' 📍' if has_pin else ''}")
+    pin = " 📍" if has_pin else ""
+    saved_text = f"✅ Saved <b>{esc(title)}</b> ({esc(item_type.title())}){pin}"
+    # Single-use "Remove" button lets the user reject a bad extraction inline.
+    keyboard = (
+        {"inline_keyboard": [[{"text": "❌ Remove", "callback_data": f"rm:{item_id}"}]]}
+        if item_id else None
+    )
+    edit_message(chat_id, progress_id, saved_text, reply_markup=keyboard, parse_mode="HTML")
     return jsonify({"status": "success", "data": payload}), 200
 
 
@@ -723,6 +863,11 @@ def setup_webhook():
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook?url={webhook_url}"
     try:
         res = requests.get(url).json()
+        # Also (re)register the slash-command menu while we're configuring.
+        try:
+            set_my_commands(BOT_COMMANDS)
+        except Exception as e:
+            print(f"[setup] set_my_commands error: {e}")
         return jsonify(res), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
