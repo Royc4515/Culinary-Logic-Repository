@@ -18,10 +18,20 @@ export default function TelegramConnectOverlay({ deepLink, token, onClose }: Pro
     ? `https://web.telegram.org/k/#@${botUsername}`
     : 'https://web.telegram.org/';
 
+  // The app deep link only works where the Telegram app is installed. On a
+  // laptop it dead-ends, so we lead with Telegram Web there instead.
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /Android|iPhone|iPad|iPod|Mobile|Windows Phone|webOS/i.test(navigator.userAgent);
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard may be unavailable; the command is still shown to copy manually */
+    }
   };
 
   return (
@@ -45,28 +55,45 @@ export default function TelegramConnectOverlay({ deepLink, token, onClose }: Pro
             </div>
           </div>
 
-          {/* Primary: open the Telegram app (mobile / desktop app) */}
-          <a
-            href={deepLink}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#1a8bbf] transition-colors shadow-md mb-3"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Open in Telegram App
-          </a>
-
-          {/* For laptops without the desktop app: open Telegram Web, then paste
-              the command below. */}
-          <a
-            href={webLink}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-2.5 bg-white border border-[#229ED9] text-[#229ED9] text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#229ED9]/5 transition-colors mb-5"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Open Telegram Web
-          </a>
+          {isMobile ? (
+            /* Mobile: the app deep link opens Telegram and sends the command. */
+            <a
+              href={deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#1a8bbf] transition-colors shadow-md mb-5"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open in Telegram
+            </a>
+          ) : (
+            /* Laptop/desktop: lead with Telegram Web (the app link dead-ends with
+               no desktop app). Copy the command on click so the user just pastes. */
+            <>
+              <a
+                href={webLink}
+                target="_blank"
+                rel="noreferrer"
+                onClick={handleCopy}
+                className="flex items-center justify-center gap-2 w-full py-3 bg-[#229ED9] text-white text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#1a8bbf] transition-colors shadow-md mb-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Telegram Web
+              </a>
+              <p className="text-[11px] text-stone-400 text-center mb-4 leading-relaxed">
+                Opens your bot in Telegram Web and copies the command — just{' '}
+                <strong className="text-stone-600">paste it in the chat and send</strong>.
+              </p>
+              <a
+                href={deepLink}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-center text-[10px] font-medium text-stone-400 hover:text-stone-600 underline mb-5"
+              >
+                Have the Telegram desktop app? Open it instead
+              </a>
+            </>
+          )}
 
           {/* Divider */}
           <div className="flex items-center gap-3 text-stone-300 mb-5">
