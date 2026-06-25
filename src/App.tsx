@@ -28,7 +28,7 @@ export default function App() {
   const [isInitializingAuth, setIsInitializingAuth] = useState(true);
 
   // Telegram Link State
-  const [telegramLink, setTelegramLink] = useState<{ id: string, telegram_username: string } | null>(null);
+  const [telegramLink, setTelegramLink] = useState<{ telegram_id: number, username: string | null } | null>(null);
   const [isLinkingTelegram, setIsLinkingTelegram] = useState(false);
   const [telegramStatusMsg, setTelegramStatusMsg] = useState<string | null>(null);
   const [pendingLinkData, setPendingLinkData] = useState<{ token: string; deep_link: string } | null>(null);
@@ -46,7 +46,7 @@ export default function App() {
     const fetchLink = async () => {
       const { data } = await supabase
         .from('telegram_links')
-        .select('id, telegram_username')
+        .select('telegram_id, username')
         .eq('user_id', session.user.id)
         .maybeSingle();
 
@@ -105,7 +105,7 @@ export default function App() {
 
   const handleDisconnectTelegram = async () => {
     if (!supabase || !telegramLink) return;
-    await supabase.from('telegram_links').delete().eq('id', telegramLink.id);
+    await supabase.from('telegram_links').delete().eq('telegram_id', telegramLink.telegram_id);
     setTelegramLink(null);
   };
 
@@ -399,7 +399,7 @@ export default function App() {
                    className="h-8 px-2 bg-stone-100 border border-stone-200 text-[#24A1DE] rounded-full flex items-center gap-1 justify-center shadow-sm text-[10px] font-bold"
                  >
                    <Send className="w-3 h-3" />
-                   @{telegramLink.telegram_username}
+                   @{telegramLink.username}
                  </button>
               )}
               <button 
@@ -512,7 +512,7 @@ export default function App() {
                telegramLink ? (
                  <div className="flex items-center gap-2 px-3 h-10 border border-stone-200 rounded-full bg-stone-50 shrink-0">
                    <Send className="w-4 h-4 text-[#24A1DE]" />
-                   <span className="text-xs font-bold uppercase tracking-widest text-[#24A1DE]">@{telegramLink.telegram_username}</span>
+                   <span className="text-xs font-bold uppercase tracking-widest text-[#24A1DE]">@{telegramLink.username}</span>
                    <button onClick={handleDisconnectTelegram} className="text-stone-400 hover:text-red-500 transition-colors ml-1" title="Disconnect Telegram">
                      <LogOut className="w-3 h-3" />
                    </button>
