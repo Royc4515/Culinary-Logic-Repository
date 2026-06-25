@@ -9,7 +9,7 @@ interface Props {
 
 export default function TelegramConnectOverlay({ deepLink, token, onClose }: Props) {
   const [copied, setCopied] = useState(false);
-  const command = `/start ${token}`;
+  const command = `/start link_${token}`;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(command);
