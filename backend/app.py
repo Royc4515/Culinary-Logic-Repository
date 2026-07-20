@@ -48,6 +48,16 @@ VISION_MODELS = [m.strip() for m in os.getenv(
     "llama-3.2-11b-vision-preview",
 ).split(",") if m.strip()]
 
+# Text-extraction provider is swappable: groq (default) | gemini | anthropic.
+# Voice transcription and photo vision stay on Groq regardless.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").lower()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+
+SYSTEM_JSON = "You return only valid JSON objects matching the requested schema. No prose, no Markdown."
+
 # Initialize Services
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 supabase: Client | None = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
@@ -246,6 +256,83 @@ def describe_photo(photo_sizes, caption=""):
         except Exception as e:
             print(f"[vision {model}] {e}")
     return ""
+
+
+# ---------- LLM provider abstraction (text extraction) ----------
+
+def llm_available():
+    """Whether the configured text-extraction provider is usable."""
+    if LLM_PROVIDER == "gemini":
+        return bool(GEMINI_API_KEY)
+    if LLM_PROVIDER in ("anthropic", "claude"):
+        return bool(ANTHROPIC_API_KEY)
+    return bool(groq_client)
+
+
+def llm_complete_json(system_prompt, user_prompt):
+    """Return the model's raw text (expected JSON) or None, per LLM_PROVIDER."""
+    try:
+        if LLM_PROVIDER == "gemini":
+            return _gemini_complete_json(system_prompt, user_prompt)
+        if LLM_PROVIDER in ("anthropic", "claude"):
+            return _anthropic_complete_json(system_prompt, user_prompt)
+        return _groq_complete_json(system_prompt, user_prompt)
+    except Exception as e:
+        print(f"[llm {LLM_PROVIDER}] error: {e}")
+        return None
+
+
+def _groq_complete_json(system_prompt, user_prompt):
+    if not groq_client:
+        return None
+    for model in MODELS_TO_TRY:
+        try:
+            r = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                model=model,
+                temperature=0.3,
+                response_format={"type": "json_object"},
+            )
+            return r.choices[0].message.content
+        except Exception as e:
+            print(f"Groq model {model} failed: {e}")
+    return None
+
+
+def _gemini_complete_json(system_prompt, user_prompt):
+    if not GEMINI_API_KEY:
+        return None
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            temperature=0.3,
+        ),
+    )
+    return resp.text
+
+
+def _anthropic_complete_json(system_prompt, user_prompt):
+    if not ANTHROPIC_API_KEY:
+        return None
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    msg = client.messages.create(
+        model=ANTHROPIC_MODEL,
+        max_tokens=2048,
+        temperature=0.3,
+        system=system_prompt + " Output only the JSON object, nothing else.",
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
 
 
 # ---------- URL / scraping / geocoding ----------
@@ -907,9 +994,9 @@ def telegram_webhook():
         progress("📥 Scraping page metadata...")
         scraped = scrape_metadata(url)
 
-    if not groq_client:
+    if not llm_available():
         progress("❌ AI service not configured.")
-        return jsonify({"status": "error", "message": "Missing Groq configuration"}), 500
+        return jsonify({"status": "error", "message": f"Missing {LLM_PROVIDER} configuration"}), 500
 
     places_data = {}
     candidate_query = (scraped.get("title") or "").strip()
@@ -934,27 +1021,11 @@ def telegram_webhook():
         places_data=json.dumps(places_data, ensure_ascii=False) if places_data else "",
     )
 
-    chat_completion = None
-    for model in MODELS_TO_TRY:
-        try:
-            chat_completion = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You return only valid JSON objects matching the requested schema. No prose, no Markdown."},
-                    {"role": "user", "content": prompt},
-                ],
-                model=model,
-                temperature=0.3,
-                response_format={"type": "json_object"},
-            )
-            break
-        except Exception as e:
-            print(f"Groq model {model} failed: {e}")
+    raw_output = llm_complete_json(SYSTEM_JSON, prompt)
+    if not raw_output:
+        progress("❌ The AI service is unavailable right now. Please try again in a minute.")
+        return jsonify({"status": "error", "message": f"{LLM_PROVIDER} completion failed"}), 500
 
-    if chat_completion is None:
-        progress("❌ All AI models are unavailable. Please try again in a minute.")
-        return jsonify({"status": "error", "message": "All Groq models failed"}), 500
-
-    raw_output = chat_completion.choices[0].message.content
     raw_output = raw_output.replace("```json", "").replace("```", "").strip()
     try:
         extracted_data = json.loads(raw_output)
