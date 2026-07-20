@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 import html as _html
 import secrets
 import urllib.parse
@@ -35,6 +36,17 @@ MODELS_TO_TRY = [
     "llama-3.1-70b-versatile",   # Backup A – High Reliability
     "llama-3.1-8b-instant",      # Backup B – High Speed/Availability
 ]
+
+# Voice transcription + image understanding (Groq). Model names change over
+# time, so they're env-overridable and the vision path tries several in order.
+TRANSCRIBE_MODEL = os.getenv("GROQ_TRANSCRIBE_MODEL", "whisper-large-v3")
+VISION_MODELS = [m.strip() for m in os.getenv(
+    "GROQ_VISION_MODELS",
+    "meta-llama/llama-4-scout-17b-16e-instruct,"
+    "meta-llama/llama-4-maverick-17b-128e-instruct,"
+    "llama-3.2-90b-vision-preview,"
+    "llama-3.2-11b-vision-preview",
+).split(",") if m.strip()]
 
 # Initialize Services
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
@@ -158,6 +170,82 @@ def ensure_commands_registered():
 # Kept for backwards-compat with any other callers.
 def send_telegram_message(chat_id, text):
     return send_message(chat_id, text)
+
+
+# ---------- Voice / photo input ----------
+
+def download_telegram_file(file_id):
+    """Resolve a Telegram file_id and return its raw bytes (or None)."""
+    if not TELEGRAM_BOT_TOKEN or not file_id:
+        return None
+    try:
+        info = telegram_request("getFile", {"file_id": file_id})
+        if not info or not info.get("ok"):
+            return None
+        file_path = info["result"]["file_path"]
+        r = requests.get(
+            f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}",
+            timeout=20,
+        )
+        return r.content if r.ok else None
+    except Exception as e:
+        print(f"[tg file] {e}")
+        return None
+
+
+def transcribe_voice(file_id):
+    """Transcribe a Telegram voice note via Groq Whisper. Returns text or ''."""
+    if not groq_client:
+        return ""
+    audio = download_telegram_file(file_id)
+    if not audio:
+        return ""
+    try:
+        res = groq_client.audio.transcriptions.create(
+            model=TRANSCRIBE_MODEL,
+            file=("voice.ogg", audio),
+        )
+        return (getattr(res, "text", "") or "").strip()
+    except Exception as e:
+        print(f"[transcribe] {e}")
+        return ""
+
+
+def describe_photo(photo_sizes, caption=""):
+    """Describe a food/place/recipe/gear photo as a short note via Groq vision.
+
+    Returns a text description (fed into the normal extraction pipeline) or ''.
+    """
+    if not groq_client or not photo_sizes:
+        return ""
+    file_id = (photo_sizes[-1] or {}).get("file_id")  # last size is the largest
+    img = download_telegram_file(file_id)
+    if not img:
+        return ""
+    b64 = base64.b64encode(img).decode("ascii")
+    hint = f' The user also wrote: "{caption}".' if caption else ""
+    prompt = (
+        "This photo was sent to a personal culinary catalog bot. In 1-3 sentences, "
+        "describe what it shows as a note the bot can save: a restaurant / bar / cafe "
+        "(include the name if a sign or menu is visible), a dish or recipe, or a piece "
+        "of kitchen gear. Mention any readable name, place, cuisine, or dish." + hint
+    )
+    for model in VISION_MODELS:
+        try:
+            res = groq_client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                ]}],
+                temperature=0.3,
+            )
+            out = (res.choices[0].message.content or "").strip()
+            if out:
+                return out
+        except Exception as e:
+            print(f"[vision {model}] {e}")
+    return ""
 
 
 # ---------- URL / scraping / geocoding ----------
@@ -462,8 +550,9 @@ def handle_link_command(message, chat_id, text):
 
 HELP_TEXT = (
     "🍴 CLR Bot\n\n"
-    "Send me a URL (Instagram, TikTok, article, Maps link) or a plain text note "
-    "and I'll extract the place / recipe / gear and save it to your repository.\n\n"
+    "Send me a URL (Instagram, TikTok, article, Maps link), a text note, a 🎤 voice "
+    "message, or a 🖼️ photo — I'll extract the place / recipe / gear and let you "
+    "confirm before saving it to your repository.\n\n"
     "Commands:\n"
     "• /list — your last 5 saved items\n"
     "• /undo — delete the last item you saved\n"
@@ -759,8 +848,35 @@ def telegram_webhook():
         handle_undo(chat_id, user_id)
         return jsonify({"status": "ok"}), 200
 
+    # Voice note / photo → derive a text note, then process it like any other.
+    if not text and (message.get("voice") or message.get("photo")):
+        if not user_id:
+            send_message(
+                chat_id,
+                "🔗 This chat isn't linked yet. Open the web app and click "
+                "'Connect Telegram' first."
+            )
+            return jsonify({"status": "not_linked"}), 200
+        send_chat_action(chat_id, "typing")
+        if message.get("voice"):
+            notice = send_message(chat_id, "🎤 Transcribing your voice note...")
+            text = transcribe_voice(message["voice"].get("file_id"))
+            if not text:
+                edit_message(chat_id, notice, "❌ Couldn't transcribe that — try again or send text.")
+                return jsonify({"status": "error"}), 200
+            edit_message(chat_id, notice, f"🎤 Heard: “{esc(text[:200])}”", parse_mode="HTML")
+        else:  # photo
+            caption = (message.get("caption") or "").strip()
+            notice = send_message(chat_id, "🖼️ Looking at your photo...")
+            described = describe_photo(message.get("photo") or [], caption)
+            if not described:
+                edit_message(chat_id, notice, "❌ Couldn't read that image — add a caption or send a text note.")
+                return jsonify({"status": "error"}), 200
+            text = (caption + "\n" + described).strip() if caption else described
+            edit_message(chat_id, notice, "🖼️ Got it — extracting...")
+
     if not text:
-        send_message(chat_id, "⚠️ Send me a URL or a text note.")
+        send_message(chat_id, "⚠️ Send me a URL, a text note, a voice message, or a photo.")
         return jsonify({"status": "ignored"}), 200
 
     if not user_id:
