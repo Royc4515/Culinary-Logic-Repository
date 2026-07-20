@@ -535,8 +535,46 @@ def handle_undo(chat_id, user_id):
     )
 
 
+def create_pending_item(telegram_id, user_id, payload):
+    """Stash a parsed item awaiting the user's Save/Discard. Returns its id, or
+    None if the pending_items table isn't available (migration 004 not run)."""
+    if not supabase:
+        return None
+    try:
+        # Keep only the latest preview per chat.
+        supabase.table("pending_items").delete().eq("telegram_id", telegram_id).execute()
+        res = supabase.table("pending_items").insert({
+            "telegram_id": telegram_id,
+            "user_id": user_id,
+            "payload": payload,
+        }).execute()
+        return res.data[0]["id"] if res.data else None
+    except Exception as e:
+        print(f"[pending] unavailable (run migration 004_pending_items.sql?): {e}")
+        return None
+
+
+def format_preview(payload):
+    """Human-readable preview of a parsed item for the confirm step."""
+    title = payload.get("title", "Untitled")
+    itype = payload.get("type", "PLACE")
+    sd = payload.get("specific_data", {}) or {}
+    desc = (sd.get("short_description") or sd.get("description") or "").strip()
+    tags = payload.get("context_tags", []) or []
+    lines = [f"🔎 <b>{esc(title)}</b>  ·  {esc(itype.title())}"]
+    if desc:
+        lines.append(esc(desc[:220]))
+    loc = sd.get("location") or {}
+    if itype == "PLACE" and isinstance(loc, dict) and loc.get("address"):
+        lines.append(f"📍 {esc(loc['address'])}")
+    if tags:
+        lines.append("🏷️ " + esc(", ".join(str(t) for t in tags[:6])))
+    lines.append("\nSave this to your repository?")
+    return "\n".join(lines)
+
+
 def handle_callback_query(cq):
-    """Handle inline-button taps: remove an item (rm:<id>) or cancel."""
+    """Handle inline-button taps: save/discard a preview, remove an item, cancel."""
     cq_id = cq.get("id")
     data = (cq.get("data") or "").strip()
     msg = cq.get("message") or {}
@@ -548,6 +586,54 @@ def handle_callback_query(cq):
         answer_callback_query(cq_id, "Cancelled")
         if chat_id and message_id:
             edit_message(chat_id, message_id, "✖️ Cancelled.")
+        return
+
+    # Preview → Save: move the pending item into the repository.
+    if data.startswith("save:"):
+        pid = data[5:]
+        user_id = get_user_id_for_telegram(telegram_id)
+        if not user_id:
+            answer_callback_query(cq_id, "This chat isn't linked.")
+            return
+        try:
+            found = supabase.table("pending_items").select("payload").eq("id", pid).eq("user_id", user_id).execute()
+            if not found.data:
+                answer_callback_query(cq_id, "This preview expired")
+                if chat_id and message_id:
+                    edit_message(chat_id, message_id, "⌛ This preview expired — send it again.")
+                return
+            item_payload = found.data[0]["payload"]
+            inserted = supabase.table("culinary_items").insert(item_payload).execute()
+            supabase.table("pending_items").delete().eq("id", pid).execute()
+            saved = inserted.data[0] if inserted.data else item_payload
+            item_id = saved.get("id")
+            title = saved.get("title", "item")
+            itype = saved.get("type", "PLACE")
+            answer_callback_query(cq_id, "Saved ✓")
+            keyboard = (
+                {"inline_keyboard": [[{"text": "❌ Remove", "callback_data": f"rm:{item_id}"}]]}
+                if item_id else None
+            )
+            if chat_id and message_id:
+                edit_message(chat_id, message_id, f"✅ Saved <b>{esc(title)}</b> ({esc(str(itype).title())})",
+                             reply_markup=keyboard, parse_mode="HTML")
+        except Exception as e:
+            print(f"[callback save] {e}")
+            answer_callback_query(cq_id, "Couldn't save it")
+        return
+
+    # Preview → Discard: drop the pending item without saving.
+    if data.startswith("disc:"):
+        pid = data[5:]
+        user_id = get_user_id_for_telegram(telegram_id)
+        try:
+            if user_id:
+                supabase.table("pending_items").delete().eq("id", pid).eq("user_id", user_id).execute()
+        except Exception as e:
+            print(f"[callback disc] {e}")
+        answer_callback_query(cq_id, "Discarded")
+        if chat_id and message_id:
+            edit_message(chat_id, message_id, "🗑️ Discarded — nothing saved.")
         return
 
     if data.startswith("rm:"):
@@ -822,6 +908,20 @@ def telegram_webhook():
     short_description = (extracted_data.get("short_description") or "").strip()
     if short_description:
         specific_data["short_description"] = short_description
+
+    # Preview-before-save: stash the parse and let the user confirm. Falls back
+    # to immediate save below if pending_items isn't available (migration 004).
+    pending_id = create_pending_item(telegram_id, user_id, payload) if supabase else None
+    if pending_id:
+        edit_message(
+            chat_id, progress_id, format_preview(payload),
+            reply_markup={"inline_keyboard": [[
+                {"text": "✅ Save", "callback_data": f"save:{pending_id}"},
+                {"text": "❌ Discard", "callback_data": f"disc:{pending_id}"},
+            ]]},
+            parse_mode="HTML",
+        )
+        return jsonify({"status": "pending", "pending_id": pending_id}), 200
 
     try:
         if supabase:
