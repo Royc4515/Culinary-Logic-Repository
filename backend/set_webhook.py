@@ -17,6 +17,9 @@ Equivalent curl commands:
 
   # Verify:
   curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+
+TELEGRAM_WEBHOOK_SECRET must be set (same value as on the backend): Telegram
+sends it back on every update and the backend rejects calls without it.
 """
 
 import os
@@ -31,10 +34,22 @@ if not TOKEN:
     print("Error: TELEGRAM_BOT_TOKEN is not set in your environment or .env file.")
     sys.exit(1)
 
+SECRET = (os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
+
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 
 def set_webhook(url: str):
-    res = requests.post(f"{BASE}/setWebhook", json={"url": url, "drop_pending_updates": True})
+    # The backend rejects every webhook call without this secret, so refusing
+    # here is better than registering a webhook that will only ever get 403s.
+    if not SECRET:
+        print("Error: TELEGRAM_WEBHOOK_SECRET is not set. Generate one with:")
+        print('  python -c "import secrets; print(secrets.token_urlsafe(32))"')
+        sys.exit(1)
+    res = requests.post(f"{BASE}/setWebhook", json={
+        "url": url,
+        "secret_token": SECRET,
+        "drop_pending_updates": True,
+    })
     data = res.json()
     if data.get("ok"):
         print(f"✅ Webhook set to: {url}")

@@ -3,6 +3,7 @@ import re
 import json
 import base64
 import html as _html
+import hmac
 import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,10 @@ app = Flask(__name__)
 # Keys & Config
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = (os.getenv("TELEGRAM_BOT_USERNAME") or "").strip().lstrip("@")
+# Shared secret Telegram echoes back in X-Telegram-Bot-Api-Secret-Token on every
+# webhook call (registered via set_webhook.py). It is the only thing proving a
+# POST to /api/webhook really came from Telegram, since the URL itself is public.
+TELEGRAM_WEBHOOK_SECRET = (os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
@@ -896,7 +901,18 @@ def link_start():
 
 @app.route('/api/webhook', methods=['POST'])
 def telegram_webhook():
-    update = request.get_json()
+    # don't touch / fails CLOSED. With no secret configured every call is
+    # rejected: an unauthenticated webhook lets anyone forge updates as any
+    # linked Telegram user and write items into their account via the
+    # service-role key. Telegram retries rejected updates, so a brief
+    # misconfiguration delays messages rather than losing them.
+    received = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    # compare_digest keeps the comparison constant-time, so the secret can't be
+    # recovered byte by byte from response timing.
+    if not TELEGRAM_WEBHOOK_SECRET or not hmac.compare_digest(received, TELEGRAM_WEBHOOK_SECRET):
+        return jsonify({"error": "forbidden"}), 403
+
+    update = request.get_json(silent=True)
     if not update:
         return jsonify({"status": "ignored"}), 200
 
@@ -1140,26 +1156,8 @@ def telegram_webhook():
     return jsonify({"status": "success", "data": payload}), 200
 
 
-@app.route('/api/setup', methods=['GET'])
-def setup_webhook():
-    webhook_url = request.args.get('url')
-    if not webhook_url:
-        return jsonify({"error": "Provide ?url=https://your-domain.com/api/webhook"}), 400
-    if not TELEGRAM_BOT_TOKEN:
-        return jsonify({"error": "TELEGRAM_BOT_TOKEN is missing"}), 500
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook?url={webhook_url}"
-    try:
-        res = requests.get(url).json()
-        # Also (re)register the slash-command menu while we're configuring.
-        try:
-            set_my_commands(BOT_COMMANDS)
-        except Exception as e:
-            print(f"[setup] set_my_commands error: {e}")
-        return jsonify(res), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # Debug mode exposes the Werkzeug interactive debugger (remote code
+    # execution if reachable), so it is opt-in for local runs only.
+    app.run(host='0.0.0.0', port=port, debug=os.environ.get("FLASK_DEBUG") == "1")
