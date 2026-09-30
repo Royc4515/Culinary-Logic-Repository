@@ -31,11 +31,23 @@ SUPABASE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 # When unset (e.g. local dev) CORS falls back to permissive "*".
 ALLOWED_ORIGINS = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
 
-MODELS_TO_TRY = [
-    "llama-3.3-70b-versatile",   # Primary – High Intelligence
-    "llama-3.1-70b-versatile",   # Backup A – High Reliability
-    "llama-3.1-8b-instant",      # Backup B – High Speed/Availability
-]
+# Groq retires model ids without notice (a stale list once made every message
+# fail), so the chain is env-overridable and _groq_complete_json falls back to
+# discovering whatever chat models the key can currently use.
+MODELS_TO_TRY = [m.strip() for m in os.getenv(
+    "GROQ_TEXT_MODELS",
+    "llama-3.3-70b-versatile,"
+    "openai/gpt-oss-120b,"
+    "openai/gpt-oss-20b,"
+    "llama-3.1-8b-instant",
+).split(",") if m.strip()]
+
+# Model families that cannot do chat completion; skipped during discovery.
+NON_CHAT_MODEL_MARKERS = ("whisper", "guard", "tts", "playai", "embed", "orpheus", "prompt-guard")
+
+# Short reason for the most recent LLM failure, surfaced in the webhook's error
+# response so a failing provider can be diagnosed without server log access.
+last_llm_error = ""
 
 # Voice transcription + image understanding (Groq). Model names change over
 # time, so they're env-overridable and the vision path tries several in order.
@@ -278,27 +290,60 @@ def llm_complete_json(system_prompt, user_prompt):
             return _anthropic_complete_json(system_prompt, user_prompt)
         return _groq_complete_json(system_prompt, user_prompt)
     except Exception as e:
-        print(f"[llm {LLM_PROVIDER}] error: {e}")
+        _note_llm_error(f"{LLM_PROVIDER}", e)
         return None
+
+
+def _note_llm_error(source, exc):
+    """Log an LLM failure and remember a short, key-free reason for the caller."""
+    global last_llm_error
+    last_llm_error = f"{source}: {type(exc).__name__}: {str(exc)[:160]}"
+    print(f"[llm] {last_llm_error}")
+
+
+def _discover_groq_chat_models(already_tried):
+    """Ask Groq which models this key can use, for when the configured ids are retired."""
+    try:
+        ids = [m.id for m in groq_client.models.list().data]
+    except Exception as e:
+        _note_llm_error("groq models.list", e)
+        return []
+    return [
+        i for i in ids
+        if i not in already_tried and not any(k in i.lower() for k in NON_CHAT_MODEL_MARKERS)
+    ]
 
 
 def _groq_complete_json(system_prompt, user_prompt):
     if not groq_client:
         return None
+
+    def attempt(model):
+        r = groq_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            model=model,
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        )
+        return r.choices[0].message.content
+
     for model in MODELS_TO_TRY:
         try:
-            r = groq_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                model=model,
-                temperature=0.3,
-                response_format={"type": "json_object"},
-            )
-            return r.choices[0].message.content
+            return attempt(model)
         except Exception as e:
-            print(f"Groq model {model} failed: {e}")
+            _note_llm_error(f"groq {model}", e)
+
+    # Every configured id failed; they may all be retired. Try what the key offers.
+    for model in _discover_groq_chat_models(MODELS_TO_TRY)[:5]:
+        try:
+            out = attempt(model)
+            print(f"[llm] groq fallback model {model} worked; set GROQ_TEXT_MODELS to include it")
+            return out
+        except Exception as e:
+            _note_llm_error(f"groq {model}", e)
     return None
 
 
@@ -1024,7 +1069,11 @@ def telegram_webhook():
     raw_output = llm_complete_json(SYSTEM_JSON, prompt)
     if not raw_output:
         progress("❌ The AI service is unavailable right now. Please try again in a minute.")
-        return jsonify({"status": "error", "message": f"{LLM_PROVIDER} completion failed"}), 500
+        return jsonify({
+            "status": "error",
+            "message": f"{LLM_PROVIDER} completion failed",
+            "reason": last_llm_error,
+        }), 500
 
     raw_output = raw_output.replace("```json", "").replace("```", "").strip()
     try:
