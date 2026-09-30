@@ -43,7 +43,7 @@ Lets a food enthusiast save restaurants, recipes and kitchen gear by forwarding 
 - Preview-before-save depends on migration 004; without `pending_items` the bot silently falls back to immediate save + "Remove" button (`app.py`, `create_pending_item`).
 - CORS: `ALLOWED_ORIGINS` empty = `*`. Any non-empty value switches to restricted mode, so leave it blank locally.
 - `render.yaml` does not declare `LLM_PROVIDER`, `GEMINI_*` or `ANTHROPIC_*`; add them in the Render UI when switching provider.
-- Groq model names drift: `MODELS_TO_TRY` and `VISION_MODELS` in `app.py` are fallback chains; vision/transcribe models are env-overridable, text models are not.
+- Groq model names drift: `MODELS_TO_TRY` (env `GROQ_TEXT_MODELS`) and `VISION_MODELS` (env `GROQ_VISION_MODELS`) are fallback chains. If every text model fails, `_groq_complete_json` discovers usable models via `models.list()`. The webhook's 500 body includes a `reason` field with the last LLM error.
 - `backend/run_local.sh` mentions `test_pipeline.py` and `/api/webhook/info`; neither exists.
 - The server.ts header comment points to `backend/render.yaml`; the file is at the repo root.
 - `ASSESSMENT.md` (2026-06-21) is partly stale: server.ts no longer has webhook logic, `npm run lint` now passes, the fallback images no longer use `source.unsplash.com`.
