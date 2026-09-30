@@ -1,5 +1,7 @@
 # LLM Prompt Template for Groq Extracting Culinary Data
 
+import re
+
 GROQ_PROMPT_TEMPLATE = """
 You are a sharp, well-traveled culinary curator. Extract structured information
 from the inputs below and return ONE valid JSON object — no prose, no Markdown.
@@ -181,12 +183,22 @@ def get_extraction_prompt(
     scraped_site: str = "",
     places_data: str = "",
 ) -> str:
-    """Inject all context into the master template."""
-    return GROQ_PROMPT_TEMPLATE.format(
-        user_text=user_text or "None provided",
-        scraped_title=scraped_title or "None provided",
-        scraped_caption=scraped_caption or "None provided",
-        scraped_body=scraped_body or "None provided",
-        scraped_site=scraped_site or "None provided",
-        places_data=places_data or "None provided",
-    ).strip()
+    """Inject all context into the master template.
+
+    Uses explicit placeholder replacement rather than str.format(): the template
+    contains literal JSON examples whose braces would otherwise be parsed as
+    format fields (raising KeyError on every request).
+    """
+    values = {
+        "user_text": user_text or "None provided",
+        "scraped_title": scraped_title or "None provided",
+        "scraped_caption": scraped_caption or "None provided",
+        "scraped_body": scraped_body or "None provided",
+        "scraped_site": scraped_site or "None provided",
+        "places_data": places_data or "None provided",
+    }
+    # Normalise any {{ }} escapes left over from the old .format() template.
+    template = GROQ_PROMPT_TEMPLATE.replace("{{", "{").replace("}}", "}")
+    # Single pass so user-supplied text containing "{...}" is never re-substituted.
+    pattern = re.compile(r"\{(" + "|".join(values) + r")\}")
+    return pattern.sub(lambda m: str(values[m.group(1)]), template).strip()
