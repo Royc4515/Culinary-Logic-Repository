@@ -85,4 +85,5 @@ echo "     python test_pipeline.py"
 echo ""
 echo "─────────────────────────────────────────────────────────────"
 
-python app.py
+# Local dev keeps auto-reload and tracebacks; app.py defaults to debug off.
+FLASK_DEBUG="${FLASK_DEBUG:-1}" python app.py
