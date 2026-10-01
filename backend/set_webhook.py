@@ -2,7 +2,7 @@
 Register (or clear) the Telegram webhook for the CLR bot.
 
 Usage:
-  # Set the webhook to your production URL:
+  # Set the webhook to your production URL (registers TELEGRAM_WEBHOOK_SECRET too):
   python set_webhook.py https://your-backend.example.com/api/webhook
 
   # Clear the webhook (switches bot back to polling mode):
@@ -10,7 +10,7 @@ Usage:
 
 Equivalent curl commands:
   # Set:
-  curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-backend.example.com/api/webhook"
+  curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-backend.example.com/api/webhook&secret_token=<SECRET>"
 
   # Delete:
   curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
@@ -20,6 +20,7 @@ Equivalent curl commands:
 """
 
 import os
+import re
 import sys
 import requests
 from dotenv import load_dotenv
@@ -33,8 +34,23 @@ if not TOKEN:
 
 BASE = f"https://api.telegram.org/bot{TOKEN}"
 
+# Must match the backend's env var: Telegram sends it back on every update and
+# app.py rejects updates without it.
+WEBHOOK_SECRET = (os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
+# Telegram's own constraint on secret_token; checked here so a bad value fails
+# loudly instead of as an opaque setWebhook error.
+SECRET_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
+
 def set_webhook(url: str):
-    res = requests.post(f"{BASE}/setWebhook", json={"url": url, "drop_pending_updates": True})
+    payload = {"url": url, "drop_pending_updates": True}
+    if WEBHOOK_SECRET:
+        if not SECRET_TOKEN_PATTERN.match(WEBHOOK_SECRET):
+            print("Error: TELEGRAM_WEBHOOK_SECRET must be 1-256 chars of A-Z, a-z, 0-9, _ or -.")
+            sys.exit(1)
+        payload["secret_token"] = WEBHOOK_SECRET
+    else:
+        print("⚠️  TELEGRAM_WEBHOOK_SECRET is not set; registering without a secret (local dev only).")
+    res = requests.post(f"{BASE}/setWebhook", json=payload)
     data = res.json()
     if data.get("ok"):
         print(f"✅ Webhook set to: {url}")

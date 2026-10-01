@@ -22,6 +22,9 @@ services:
         sync: false
       - key: TELEGRAM_BOT_USERNAME
         sync: false
+      # Random string (A-Z a-z 0-9 _ -); must match what set_webhook.py registered.
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
       - key: GROQ_API_KEY
         sync: false
       - key: MAPS_API_KEY
