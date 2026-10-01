@@ -2,6 +2,7 @@ import os
 import re
 import json
 import base64
+import hmac
 import html as _html
 import secrets
 import urllib.parse
@@ -22,6 +23,9 @@ app = Flask(__name__)
 # Keys & Config
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = (os.getenv("TELEGRAM_BOT_USERNAME") or "").strip().lstrip("@")
+# Telegram echoes this back in X-Telegram-Bot-Api-Secret-Token on every update
+# once set_webhook.py registers it; it is the only proof a POST came from Telegram.
+TELEGRAM_WEBHOOK_SECRET = (os.getenv("TELEGRAM_WEBHOOK_SECRET") or "").strip()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 MAPS_API_KEY = os.getenv("MAPS_API_KEY")
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip().rstrip("/")
@@ -939,8 +943,28 @@ def link_start():
     }), 200
 
 
+_warned_missing_webhook_secret = False
+
+
+def is_authentic_telegram_request() -> bool:
+    """True if the request carries the webhook secret Telegram was registered with."""
+    global _warned_missing_webhook_secret
+    if not TELEGRAM_WEBHOOK_SECRET:
+        # Unset only in local dev (ngrok); warn once per worker instead of per update.
+        if not _warned_missing_webhook_secret:
+            print("[webhook] WARNING: TELEGRAM_WEBHOOK_SECRET is not set; accepting unauthenticated updates")
+            _warned_missing_webhook_secret = True
+        return True
+    received = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    # don't touch / constant-time compare: == leaks the secret's prefix via timing.
+    return hmac.compare_digest(received.encode(), TELEGRAM_WEBHOOK_SECRET.encode())
+
+
 @app.route('/api/webhook', methods=['POST'])
 def telegram_webhook():
+    if not is_authentic_telegram_request():
+        return jsonify({"error": "forbidden"}), 403
+
     update = request.get_json()
     if not update:
         return jsonify({"status": "ignored"}), 200
@@ -1187,26 +1211,6 @@ def telegram_webhook():
     )
     edit_message(chat_id, progress_id, saved_text, reply_markup=keyboard, parse_mode="HTML")
     return jsonify({"status": "success", "data": payload}), 200
-
-
-@app.route('/api/setup', methods=['GET'])
-def setup_webhook():
-    webhook_url = request.args.get('url')
-    if not webhook_url:
-        return jsonify({"error": "Provide ?url=https://your-domain.com/api/webhook"}), 400
-    if not TELEGRAM_BOT_TOKEN:
-        return jsonify({"error": "TELEGRAM_BOT_TOKEN is missing"}), 500
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook?url={webhook_url}"
-    try:
-        res = requests.get(url).json()
-        # Also (re)register the slash-command menu while we're configuring.
-        try:
-            set_my_commands(BOT_COMMANDS)
-        except Exception as e:
-            print(f"[setup] set_my_commands error: {e}")
-        return jsonify(res), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':

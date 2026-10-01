@@ -4,7 +4,7 @@
 Lets a food enthusiast save restaurants, recipes and kitchen gear by forwarding a link, text note, voice message or photo to a Telegram bot, which scrapes, enriches (Google Places) and LLM-extracts it into a structured item shown in a personal web gallery and map.
 
 ## Stack & layout
-- `backend/app.py` - Flask service (gunicorn on Render, `render.yaml`). Owns ALL server logic: Telegram webhook, scraping (Microlink, BeautifulSoup fallback), Google Places enrichment, LLM extraction, Supabase writes. Routes: `/`, `/api/link/start`, `/api/webhook`, `/api/setup`.
+- `backend/app.py` - Flask service (gunicorn on Render, `render.yaml`). Owns ALL server logic: Telegram webhook, scraping (Microlink, BeautifulSoup fallback), Google Places enrichment, LLM extraction, Supabase writes. Routes: `/`, `/api/link/start`, `/api/webhook`. Webhook registration is CLI-only via `backend/set_webhook.py` (the old unauthenticated `/api/setup` route was removed).
 - `backend/prompts.py` - extraction prompts (few-shot, one per PLACE / RECIPE / GEAR).
 - `backend/migrations/00N_*.sql` - ordered schema changes. `schema.sql` is the baseline (destructive, see Gotchas).
 - `backend/set_webhook.py` - register / clear / inspect the Telegram webhook.
@@ -39,12 +39,11 @@ Lets a food enthusiast save restaurants, recipes and kitchen gear by forwarding 
 - `src/lib/supabase.ts` ignores `VITE_SUPABASE_ANON_KEY` on purpose: the Vercel env var was once set to an unrelated Google key and broke auth. Do not "fix" it back to env.
 - `src/App.tsx` falls back to the hardcoded Render URL when `VITE_BACKEND_URL` is unset.
 - `schema.sql` starts with `DROP TABLE culinary_items`. Never run it against a project with data.
-- `/api/setup` is unauthenticated and calls Telegram `setWebhook` with any `?url=`; `/api/webhook` does not check Telegram's secret-token header. Anyone who knows the backend URL can repoint or spoof the bot.
+- `/api/webhook` returns 403 unless `X-Telegram-Bot-Api-Secret-Token` matches `TELEGRAM_WEBHOOK_SECRET`. If the env var is unset it logs a warning and accepts everything (local dev only). Changing the secret means re-running `set_webhook.py` after the deploy is live, or every update is rejected until you do.
 - Preview-before-save depends on migration 004; without `pending_items` the bot silently falls back to immediate save + "Remove" button (`app.py`, `create_pending_item`).
 - CORS: `ALLOWED_ORIGINS` empty = `*`. Any non-empty value switches to restricted mode, so leave it blank locally.
 - `render.yaml` does not declare `LLM_PROVIDER`, `GEMINI_*` or `ANTHROPIC_*`; add them in the Render UI when switching provider.
 - Groq model names drift: `MODELS_TO_TRY` (env `GROQ_TEXT_MODELS`) and `VISION_MODELS` (env `GROQ_VISION_MODELS`) are fallback chains. If every text model fails, `_groq_complete_json` discovers usable models via `models.list()`. The webhook's 500 body includes a `reason` field with the last LLM error.
-- `backend/run_local.sh` mentions `test_pipeline.py` and `/api/webhook/info`; neither exists.
 - The server.ts header comment points to `backend/render.yaml`; the file is at the repo root.
 - `ASSESSMENT.md` (2026-06-21) is partly stale: server.ts no longer has webhook logic, `npm run lint` now passes, the fallback images no longer use `source.unsplash.com`.
 - Frontend Maps key is `GOOGLE_MAPS_PLATFORM_KEY` (injected in `vite.config.ts`) and is missing from `.env.example`; backend uses `MAPS_API_KEY`.
