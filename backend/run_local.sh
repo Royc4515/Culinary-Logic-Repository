@@ -69,7 +69,7 @@ fi
 
 # ── 6. Start Flask ────────────────────────────────────────────────────────────
 echo ""
-echo "🚀 Starting Flask on http://0.0.0.0:8000"
+echo "🚀 Starting Flask on port 8000 (bound to 127.0.0.1 while FLASK_DEBUG is on)"
 echo "   Health check:    http://localhost:8000/"
 echo "   Webhook:         http://localhost:8000/api/webhook"
 echo "   Webhook info:    http://localhost:8000/api/webhook/info"
