@@ -1215,4 +1215,10 @@ def telegram_webhook():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # Off unless asked for: the Werkzeug debugger allows arbitrary code execution,
+    # and this block runs whenever someone starts the app without gunicorn.
+    debug = (os.environ.get("FLASK_DEBUG") or "").strip().lower() in ("1", "true", "yes", "on")
+    # Debug binds to loopback so the debugger is not reachable from the LAN;
+    # ngrok still works because it connects from localhost.
+    host = "127.0.0.1" if debug else "0.0.0.0"
+    app.run(host=host, port=port, debug=debug)

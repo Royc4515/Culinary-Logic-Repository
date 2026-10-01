@@ -47,4 +47,4 @@ Lets a food enthusiast save restaurants, recipes and kitchen gear by forwarding 
 - The server.ts header comment points to `backend/render.yaml`; the file is at the repo root.
 - `ASSESSMENT.md` (2026-06-21) is partly stale: server.ts no longer has webhook logic, `npm run lint` now passes, the fallback images no longer use `source.unsplash.com`.
 - Frontend Maps key is `GOOGLE_MAPS_PLATFORM_KEY` (injected in `vite.config.ts`) and is missing from `.env.example`; backend uses `MAPS_API_KEY`.
-- `app.py` `__main__` runs Flask with `debug=True`; production must go through gunicorn.
+- `app.py` `__main__` runs Flask with debug off unless `FLASK_DEBUG` is truthy (`run_local.sh` sets it to 1). Production must still go through gunicorn, which never hits that block.
